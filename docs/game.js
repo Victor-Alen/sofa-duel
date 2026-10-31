@@ -787,14 +787,18 @@
 
       // Hard difficulty: predict opponent blink/teleport and place trap
       if (difficulty === 'hard' && other.warpLeft > 0 && p.characterId === 'trap' && !p.trap && p.skillCooldown <= 0) {
-        const predictX = other.x + other.facingX * skill.distance;
-        const predictY = other.y + other.facingY * skill.distance;
-        const predictDist = Math.hypot(predictX - p.x, predictY - p.y);
-        if (predictDist < 150) {
-          p.facingX = (predictX - p.x) / predictDist;
-          p.facingY = (predictY - p.y) / predictDist;
-          p.wantsSkill = true;
-          p.aiDecision = reactionTime;
+        const otherSkill = CHARACTERS[other.characterId].skill;
+        const otherBlinkDistance = otherSkill.kind === 'blink' ? otherSkill.distance : 0;
+        if (otherBlinkDistance > 0) {
+          const predictX = other.x + other.facingX * otherBlinkDistance;
+          const predictY = other.y + other.facingY * otherBlinkDistance;
+          const predictDist = Math.hypot(predictX - p.x, predictY - p.y);
+          if (predictDist < 150) {
+            p.facingX = (predictX - p.x) / predictDist;
+            p.facingY = (predictY - p.y) / predictDist;
+            p.wantsSkill = true;
+            p.aiDecision = reactionTime;
+          }
         }
       }
 
@@ -1851,20 +1855,34 @@
       const remotePlayerIdx = 1 - onlinePlayerNumber;
       const remotePlayer = state.players[remotePlayerIdx];
       if (remotePlayer && players[remotePlayerIdx]) {
-        // Store current position as previous
-        remoteInterpolation.prevX = players[remotePlayerIdx].x;
-        remoteInterpolation.prevY = players[remotePlayerIdx].y;
-        remoteInterpolation.prevVX = players[remotePlayerIdx].vx;
-        remoteInterpolation.prevVY = players[remotePlayerIdx].vy;
+        // Initialize interpolation state on first update
+        if (remoteInterpolation.lastUpdateTime === 0) {
+          remoteInterpolation.prevX = remotePlayer.x;
+          remoteInterpolation.prevY = remotePlayer.y;
+          remoteInterpolation.prevVX = remotePlayer.vx;
+          remoteInterpolation.prevVY = remotePlayer.vy;
+          remoteInterpolation.targetX = remotePlayer.x;
+          remoteInterpolation.targetY = remotePlayer.y;
+          remoteInterpolation.targetVX = remotePlayer.vx;
+          remoteInterpolation.targetVY = remotePlayer.vy;
+          players[remotePlayerIdx].x = remotePlayer.x;
+          players[remotePlayerIdx].y = remotePlayer.y;
+        } else {
+          // Store current position as previous
+          remoteInterpolation.prevX = players[remotePlayerIdx].x;
+          remoteInterpolation.prevY = players[remotePlayerIdx].y;
+          remoteInterpolation.prevVX = players[remotePlayerIdx].vx;
+          remoteInterpolation.prevVY = players[remotePlayerIdx].vy;
 
-        // Set new target position
-        remoteInterpolation.targetX = remotePlayer.x;
-        remoteInterpolation.targetY = remotePlayer.y;
-        remoteInterpolation.targetVX = remotePlayer.vx;
-        remoteInterpolation.targetVY = remotePlayer.vy;
+          // Set new target position
+          remoteInterpolation.targetX = remotePlayer.x;
+          remoteInterpolation.targetY = remotePlayer.y;
+          remoteInterpolation.targetVX = remotePlayer.vx;
+          remoteInterpolation.targetVY = remotePlayer.vy;
 
-        // Reset interpolation timer
-        remoteInterpolation.interpTime = 0;
+          // Reset interpolation timer
+          remoteInterpolation.interpTime = 0;
+        }
         remoteInterpolation.lastUpdateTime = performance.now();
       }
     }
@@ -1914,17 +1932,25 @@
 
   async function leaveOnlineRoom() {
     stopConnectionCheck();
-    if (network) {
-      await network.leaveRoom();
-      network = null;
-    }
     if (onlineGameInterval) {
       clearInterval(onlineGameInterval);
       onlineGameInterval = null;
     }
+    if (network) {
+      await network.leaveRoom();
+      network = null;
+    }
     $('online-game-hud').hidden = true;
     onlineOpponentCharacter = null;
     onlineOpponentInput = { keys: new Set(), mobile: { x: 0, y: 0 }, skill: false };
+    // Reset interpolation state
+    remoteInterpolation = {
+      prevX: 0, prevY: 0, prevVX: 0, prevVY: 0,
+      targetX: 0, targetY: 0, targetVX: 0, targetVY: 0,
+      interpTime: 0, interpDuration: 0.1,
+      lastUpdateTime: 0
+    };
+    networkLag = 0;
     showOnlineScreen();
   }
 

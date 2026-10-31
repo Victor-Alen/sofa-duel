@@ -200,6 +200,10 @@
 
       switch (data.type) {
         case 'gameState':
+          // Add timestamp to state for lag calculation
+          if (data.timestamp && data.state) {
+            data.state.timestamp = data.timestamp;
+          }
           if (this.onStateChange) this.onStateChange(data.state);
           break;
         case 'input':
