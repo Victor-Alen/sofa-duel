@@ -44,7 +44,7 @@
     frame.width = 480; frame.height = 270;
     return frame;
   });
-  const game = { mode: 'cpu', difficulty: 'normal', phase: 'menu', manualPicks: ['dash', 'guard'], picks: ['dash', 'guard'], scores: [0, 0], capture: [0, 0], time: ROUND_SECONDS, seat: { x: 480, y: 312 }, previousSeatY: null, rule: null, previousRule: null, ruleHistory: [], ruleTarget: null, ruleMove: null, rulePhase: 'idle', elapsed: 0, round: 0, tiedRounds: 0, wait: 0, bannerTime: 0, playTipTime: 0, bannerText: '', particles: [], shake: 0, hitStop: 0, paused: false, audio: true, audioContext: null, replay: null, highlightFrames: [], highlightClock: 0, lastImpact: null, combo: [0, 0], maxCombo: [0, 0], stats: loadStats(), music: null, musicGain: null, achievementQueue: [], currentAchievement: null };
+  const game = { mode: 'cpu', difficulty: 'normal', lastCpuPick: null, phase: 'menu', manualPicks: ['dash', 'guard'], picks: ['dash', 'guard'], scores: [0, 0], capture: [0, 0], time: ROUND_SECONDS, seat: { x: 480, y: 312 }, previousSeatY: null, rule: null, previousRule: null, ruleHistory: [], ruleTarget: null, ruleMove: null, rulePhase: 'idle', elapsed: 0, round: 0, tiedRounds: 0, wait: 0, bannerTime: 0, playTipTime: 0, bannerText: '', particles: [], shake: 0, hitStop: 0, paused: false, audio: true, audioContext: null, replay: null, highlightFrames: [], highlightClock: 0, lastImpact: null, combo: [0, 0], maxCombo: [0, 0], stats: loadStats(), music: null, musicGain: null, achievementQueue: [], currentAchievement: null };
   let last = performance.now();
 
   function makePlayer(i) {
@@ -199,7 +199,7 @@
   function resetPlayers() {
     for (let i = 0; i < 2; i++) {
       const p = players[i];
-      Object.assign(p, { characterId: game.picks[i], x: narrowScreen() ? (i ? 620 : 340) : (i ? 730 : 230), y: 355, vx: 0, vy: 0, facingX: i ? -1 : 1, facingY: 0, dashLeft: 0, dashHit: false, shieldLeft: 0, shieldHit: false, pulseLeft: 0, pullLeft: 0, warpLeft: 0, reboundLeft: 0, reboundX: 0, reboundY: 0, reboundPower: 0, trap: null, skillCooldown: 0, stunned: 0, blink: 0, walk: 0, aiDecision: 0, wantsSkill: false, anim: i * 1.7, emotion: 'neutral', emotionLeft: 0, castLeft: 0, castTotal: .4, impactLeft: 0, celebrateLeft: 0 });
+      Object.assign(p, { characterId: game.picks[i], x: narrowScreen() ? (i ? 620 : 340) : (i ? 730 : 230), y: 355, vx: 0, vy: 0, facingX: i ? -1 : 1, facingY: 0, dashLeft: 0, dashHit: false, shieldLeft: 0, shieldHit: false, pulseLeft: 0, pullLeft: 0, warpLeft: 0, reboundLeft: 0, reboundX: 0, reboundY: 0, reboundPower: 0, trap: null, skillCooldown: 0, stunned: 0, blink: 0, walk: 0, aiDecision: i ? .5 + Math.random() * .6 : 0, wantsSkill: false, anim: i * 1.7, emotion: 'neutral', emotionLeft: 0, castLeft: 0, castTotal: .4, impactLeft: 0, celebrateLeft: 0 });
     }
   }
 
@@ -311,8 +311,14 @@
       }
       game.picks = picks.slice(0, 2);
     } else if (game.mode === 'cpu') {
-      const opponents = CHARACTER_IDS.filter(id => id !== game.manualPicks[0]);
-      game.picks = [game.manualPicks[0], opponents[Math.floor(Math.random() * opponents.length)]];
+      const candidates = CHARACTER_IDS.filter(id => id !== game.manualPicks[0]);
+      // Avoid handing the CPU the same character two matches in a row when possible,
+      // so players don't keep facing the same skill (e.g. 冲撞) repeatedly.
+      const fresh = candidates.filter(id => id !== game.lastCpuPick);
+      const pool = fresh.length ? fresh : candidates;
+      const cpuPick = pool[Math.floor(Math.random() * pool.length)];
+      game.picks = [game.manualPicks[0], cpuPick];
+      game.lastCpuPick = cpuPick;
     } else {
       game.picks = [...game.manualPicks];
     }
@@ -408,6 +414,8 @@
     $('start-btn').firstChild.textContent = game.mode === 'demo' ? '开始观看演示 ' : game.mode === 'online' ? '进入联网模式 ' : '开始抢沙发 ';
     $('player-a-label').textContent = `${game.mode === 'demo' ? '电脑' : '玩家一'}·${CHARACTERS[game.picks[0]].name}`;
     $('player-b-label').textContent = waitingForOpponent ? '随机对手' : `${game.mode === 'demo' || game.mode === 'cpu' ? '电脑' : '玩家二'}·${CHARACTERS[game.picks[1]].name}`;
+    const enemySkill = CHARACTERS[game.picks[1]].skill;
+    $('player-b-label').title = waitingForOpponent ? '本局对手角色随机' : `技能：${enemySkill.name} · ${enemySkill.description}`;
     for (let i = 0; i < 2; i++) {
       const character = CHARACTERS[game.picks[i]];
       const avatar = document.querySelector(i ? '.team-b .avatar' : '.team-a .avatar');
@@ -678,12 +686,23 @@
     }
   };
 
+  function isAiPlayer(p) {
+    return game.mode === 'demo' || (p.i === 1 && game.mode === 'cpu');
+  }
+
+  // AI uses skills on a longer cooldown on lower difficulties, giving players more breathing room.
+  function aiCooldownFactor(p) {
+    if (!isAiPlayer(p)) return 1;
+    const difficulty = game.difficulty || 'normal';
+    return difficulty === 'easy' ? 1.45 : difficulty === 'normal' ? 1.2 : 1;
+  }
+
   function useSkill(p, simultaneous = false) {
     if (game.phase !== 'playing' || game.paused || p.skillCooldown > 0 || (!simultaneous && p.stunned > 0)) return;
     const skill = CHARACTERS[p.characterId].skill;
     const handler = skillHandlers[skill.kind];
     if (!handler) return;
-    p.skillCooldown = skill.cooldown * (game.rule && game.rule.id === 'frenzy' ? game.rule.cooldownFactor : 1);
+    p.skillCooldown = skill.cooldown * (game.rule && game.rule.id === 'frenzy' ? game.rule.cooldownFactor : 1) * aiCooldownFactor(p);
     p.castTotal = skill.kind === 'trap' ? .5 : skill.kind === 'pull' ? .46 : .38;
     p.castLeft = p.castTotal;
     react(p, 'focused', p.castTotal);
@@ -773,7 +792,7 @@
 
       // Difficulty-based parameters
       const difficulty = game.difficulty || 'normal';
-      const reactionTime = difficulty === 'easy' ? 0.8 : difficulty === 'normal' ? 0.55 : 0.35;
+      const reactionTime = difficulty === 'easy' ? 1 : difficulty === 'normal' ? .75 : .4;
       const aggression = difficulty === 'easy' ? 0.3 : difficulty === 'normal' ? 0.5 : 0.7;
 
       // Trap avoidance (all difficulties)
@@ -817,7 +836,7 @@
       const opposingSkill = CHARACTERS[other.characterId].skill.kind;
 
       // Per-difficulty skill attempt chance (checked once per decision window, not per frame)
-      const attemptChance = difficulty === 'easy' ? 0.3 : difficulty === 'normal' ? 0.5 : 0.75;
+      const attemptChance = difficulty === 'easy' ? 0.2 : difficulty === 'normal' ? 0.35 : 0.7;
 
       // Smarter skill usage based on difficulty
       let useNow = false;
@@ -855,7 +874,9 @@
         } else {
           // No good opportunity right now: re-evaluate later instead of every frame,
           // so the AI never fires skills with frame-perfect timing.
-          p.aiDecision = 0.25 + Math.random() * 0.35;
+          const baseWait = difficulty === 'easy' ? .5 : difficulty === 'normal' ? .38 : .2;
+          const extraWait = difficulty === 'hard' ? .3 : .5;
+          p.aiDecision = baseWait + Math.random() * extraWait;
         }
       }
       return { x: dx, y: dy };
@@ -1387,7 +1408,7 @@
     roundRect(x - 27, y - 65, 54, 21, 9, '#fffaf0');
     ctx.fillStyle = dark; ctx.font = '800 12px Noto Sans SC, sans-serif'; ctx.textAlign = 'center'; ctx.fillText(character.name, x, y - 49);
     if (p.skillCooldown > 0) {
-      const cooldown = character.skill.cooldown * (game.rule && game.rule.id === 'frenzy' ? game.rule.cooldownFactor : 1);
+      const cooldown = character.skill.cooldown * (game.rule && game.rule.id === 'frenzy' ? game.rule.cooldownFactor : 1) * aiCooldownFactor(p);
       roundRect(x - 22, y + 29, 44, 5, 3, '#fff9');
       roundRect(x - 22, y + 29, 44 * (1 - p.skillCooldown / cooldown), 5, 3, light);
     }
