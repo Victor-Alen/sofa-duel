@@ -30,7 +30,7 @@
     trap: {
       id: 'trap', name: '米米', color: '#ed9fb5', dark: '#bd6987', light: '#f7c9d7',
       speed: 200, ears: 'leaf', pitch: 580, wave: 'triangle', personality: '抱枕比本人更有主意',
-      skill: { kind: 'trap', name: '抱枕阵', description: '留下抱枕，困住踩到的对手', cooldown: 3.2, duration: 3, arm: .55, radius: 46, stun: .5 }
+      skill: { kind: 'trap', name: '抱枕阵', description: '留下抱枕，困住踩到的对手', cooldown: 3.2, duration: 3.5, arm: .45, radius: 50, stun: 1.1 }
     }
   };
   for (const character of Object.values(roster)) {
