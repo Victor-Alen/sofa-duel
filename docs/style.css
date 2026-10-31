@@ -133,3 +133,51 @@ body.record-mode .rule-hud{max-width:78%;font-size:12px}
 .ach-content strong{display:block;font-size:14px;font-weight:900;color:#5a4500;letter-spacing:.5px;margin-bottom:2px}
 .ach-content p{margin:0;font-size:12px;font-weight:700;color:#7a6500}
 @media(max-width:760px){.achievement-popup{top:12px}.ach-content{padding:10px 14px;gap:8px}.ach-icon{font-size:24px}.ach-content strong{font-size:12px}.ach-content p{font-size:10px}}
+
+/* Online Multiplayer Styles */
+.online-card{min-width:min(400px,90%)}
+.online-menu{display:flex;flex-direction:column;gap:12px;margin-top:16px}
+.online-divider{display:flex;align-items:center;gap:12px;color:#b1a8a3;font-size:12px;font-weight:700}
+.online-divider:before,.online-divider:after{content:'';flex:1;height:1px;background:#f2c6b8}
+.join-room-form{display:flex;gap:8px}
+.join-room-form input{flex:1;padding:12px 14px;border:2px solid #f2c6b8;border-radius:12px;font-family:inherit;font-size:14px;font-weight:700;text-align:center;letter-spacing:2px;text-transform:uppercase;background:#fff}
+.join-room-form input:focus{outline:none;border-color:#ff6c52}
+.join-room-form .secondary-btn{width:auto;margin:0;padding:12px 18px}
+.online-waiting{display:flex;flex-direction:column;align-items:center;gap:16px;margin-top:16px}
+.room-code-display{display:flex;flex-direction:column;align-items:center;gap:6px;padding:16px 24px;background:#fff0dc;border-radius:16px;border:2px dashed #ffb89a}
+.room-code-display small{font-size:10px;letter-spacing:2px;color:#a96343;font-weight:800}
+.room-code-display strong{font-size:32px;letter-spacing:6px;color:#ff6c52;font-weight:900}
+.room-code-display .icon-btn{width:32px;height:32px;font-size:16px}
+.waiting-text{font-size:13px;color:#89858d;margin:0}
+.waiting-players{display:flex;gap:20px;justify-content:center}
+.waiting-player{display:flex;flex-direction:column;align-items:center;gap:6px;padding:12px 16px;border-radius:12px;background:#f9f3ec;min-width:100px}
+.waiting-player span{font-size:24px;color:#ff6c52}
+.waiting-player.ready span{color:#4caf50}
+.waiting-player small{font-size:11px;color:#89858d;font-weight:700}
+.online-character-select{display:flex;flex-direction:column;align-items:center;gap:16px;margin-top:16px}
+.select-hint{font-size:13px;color:#89858d;margin:0}
+.online-status{display:flex;gap:20px;justify-content:center;margin-top:8px}
+.status-player{display:flex;flex-direction:column;align-items:center;gap:4px;padding:10px 14px;border-radius:10px;background:#f9f3ec}
+.status-player span{font-size:20px;color:#ccc}
+.status-player.ready span{color:#4caf50}
+.status-player small{font-size:11px;color:#89858d;font-weight:700}
+.online-game-hud{position:absolute;top:12px;left:50%;transform:translateX(-50%);z-index:6;display:flex;align-items:center;gap:16px;padding:8px 16px;background:#fff9f0;border-radius:20px;border:1px solid #eaded2;box-shadow:0 4px 12px #45372213}
+.online-player-info{display:flex;gap:12px;align-items:center}
+.player-indicator{font-size:11px;font-weight:900;color:#fff;background:#4caf50;padding:4px 10px;border-radius:10px}
+.opponent-name{font-size:11px;font-weight:700;color:#89858d}
+.connection-status{display:flex;align-items:center;gap:6px}
+.status-dot{width:8px;height:8px;border-radius:50%;background:#4caf50;animation:pulse 2s infinite}
+.status-dot.disconnected{background:#f44336;animation:none}
+.status-dot.connecting{background:#ff9800;animation:pulse 1s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
+.connection-status small{font-size:10px;color:#89858d;font-weight:700}
+@media(max-width:760px){
+  .online-card{min-width:min(320px,92%)}
+  .join-room-form{flex-direction:column}
+  .join-room-form .secondary-btn{width:100%}
+  .room-code-display strong{font-size:26px;letter-spacing:4px}
+  .waiting-players{gap:12px}
+  .waiting-player{min-width:80px;padding:10px 12px}
+  .online-status{gap:12px}
+  .online-game-hud{top:8px;padding:6px 12px;gap:10px}
+}

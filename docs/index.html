@@ -16,7 +16,7 @@
 
     <section class="intro">
       <div><span class="eyebrow">谁才是这个家的主人？</span><h1>抢到沙发，<em>坐到最后。</em></h1><p>六名角色自由选，用专属技能逼开对手。独占 1.6 秒得分，先拿 3 分获胜。</p></div>
-      <div class="mode-switch" role="group" aria-label="游戏模式"><button class="mode active" data-mode="cpu">单人挑战</button><button class="mode" data-mode="duo">本地双人</button><button class="mode" data-mode="demo">自动演示</button></div>
+      <div class="mode-switch" role="group" aria-label="游戏模式"><button class="mode active" data-mode="cpu">单人挑战</button><button class="mode" data-mode="duo">本地双人</button><button class="mode" data-mode="online">联网对战</button><button class="mode" data-mode="demo">自动演示</button></div>
     </section>
 
     <section class="game-wrap" aria-label="沙发对决游戏">
@@ -56,6 +56,53 @@
             <small>随机房间规则 · 每局 18 秒 · 三分获胜</small>
           </div>
         </div>
+        <div id="online-screen" class="screen" aria-live="polite">
+          <div class="screen-card online-card">
+            <span class="card-icon">🌐</span>
+            <p class="card-kicker">ONLINE MODE</p>
+            <h2>联网对战</h2>
+            <div id="online-menu" class="online-menu">
+              <button id="create-room-btn" class="primary-btn">创建房间 <span>+</span></button>
+              <div class="online-divider"><span>或</span></div>
+              <div class="join-room-form">
+                <input type="text" id="room-code-input" placeholder="输入房间号" maxlength="6" autocomplete="off">
+                <button id="join-room-btn" class="secondary-btn">加入房间 <span>→</span></button>
+              </div>
+            </div>
+            <div id="online-waiting" class="online-waiting" hidden>
+              <div class="room-code-display">
+                <small>房间号</small>
+                <strong id="room-code">------</strong>
+                <button id="copy-code-btn" class="icon-btn" title="复制房间号">📋</button>
+              </div>
+              <p class="waiting-text">等待对手加入...</p>
+              <div class="waiting-players">
+                <div class="waiting-player ready"><span>●</span><small>玩家一 (你)</small></div>
+                <div class="waiting-player" id="waiting-player-2"><span>○</span><small>等待中...</small></div>
+              </div>
+              <button id="cancel-waiting-btn" class="secondary-btn">取消</button>
+            </div>
+            <div id="online-character-select" class="online-character-select" hidden>
+              <p class="select-hint">选择你的角色</p>
+              <div id="online-picker" class="character-options"></div>
+              <div class="online-status">
+                <div class="status-player ready"><span>●</span><small>玩家一: <span id="online-p1-char">-</span></small></div>
+                <div class="status-player" id="online-p2-status"><span>○</span><small>玩家二: <span id="online-p2-char">等待中</span></small></div>
+              </div>
+            </div>
+            <button id="back-to-menu-btn" class="secondary-btn" hidden>返回菜单</button>
+          </div>
+        </div>
+        <div id="online-game-hud" class="online-game-hud" hidden>
+          <div class="online-player-info">
+            <span class="player-indicator" id="online-you-indicator">你</span>
+            <span class="opponent-name" id="online-opponent-name">对手</span>
+          </div>
+          <div class="connection-status" id="connection-status">
+            <span class="status-dot"></span>
+            <small>连接中</small>
+          </div>
+        </div>
         <div id="result-screen" class="screen" aria-live="polite">
           <div class="screen-card result-card">
             <span class="card-icon" id="result-icon">🏆</span>
@@ -84,7 +131,7 @@
       <div class="instruction"><span class="instruction-icon">✦</span><div><strong>技能</strong><span>玩家一：空格 <i>·</i> 玩家二：回车</span></div></div>
       <div class="instruction tip"><span class="instruction-icon">!</span><div><strong>小秘诀</strong><span>两人同时靠近沙发时无法占领，先用技能逼开对手。P 暂停。</span></div></div>
     </section>
-    <footer>六角色同屏对决 · 手机可单人挑战 · 无需联网</footer>
+    <footer>六角色同屏对决 · 手机可单人挑战 · 联网双人在线对战</footer>
   </main>
   <dialog id="poster-dialog" class="poster-dialog" aria-label="战绩海报">
     <button id="poster-close" class="poster-close" aria-label="关闭海报">×</button>
@@ -96,6 +143,7 @@
   </dialog>
   <script src="characters.js"></script>
   <script src="rules.js"></script>
+  <script src="network.js"></script>
   <script src="game.js"></script>
 </body>
 </html>
