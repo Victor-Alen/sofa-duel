@@ -22,6 +22,22 @@
   // All starting spots are centered horizontally so neither side starts closer.
   const seatSpots = [[480, 312], [480, 255], [480, 365]];
   const narrowScreen = () => window.matchMedia('(max-width: 760px)').matches;
+  const isDesktop = () => !narrowScreen() && !('ontouchstart' in window) && window.innerWidth > 760;
+
+  // Apply desktop fullscreen mode automatically
+  if (isDesktop()) {
+    document.body.classList.add('desktop-mode');
+  }
+
+  // Listen for resize to toggle desktop mode
+  window.addEventListener('resize', () => {
+    if (isDesktop()) {
+      document.body.classList.add('desktop-mode');
+    } else {
+      document.body.classList.remove('desktop-mode');
+    }
+  });
+
   const players = [makePlayer(0), makePlayer(1)];
   const highlightPool = Array.from({ length: HIGHLIGHT_FRAME_COUNT }, () => {
     const frame = document.createElement('canvas');
