@@ -774,7 +774,6 @@
       // Difficulty-based parameters
       const difficulty = game.difficulty || 'normal';
       const reactionTime = difficulty === 'easy' ? 0.8 : difficulty === 'normal' ? 0.55 : 0.35;
-      const skillAccuracy = difficulty === 'easy' ? 0.6 : difficulty === 'normal' ? 0.8 : 0.95;
       const aggression = difficulty === 'easy' ? 0.3 : difficulty === 'normal' ? 0.5 : 0.7;
 
       // Trap avoidance (all difficulties)
@@ -817,26 +816,33 @@
       p.aiDecision -= dt;
       const opposingSkill = CHARACTERS[other.characterId].skill.kind;
 
+      // Per-difficulty skill attempt chance (checked once per decision window, not per frame)
+      const attemptChance = difficulty === 'easy' ? 0.3 : difficulty === 'normal' ? 0.5 : 0.75;
+
       // Smarter skill usage based on difficulty
       let useNow = false;
       if (p.aiDecision <= 0 && other.stunned <= 0 && p.skillCooldown <= 0) {
         if (skill.kind === 'dash') {
+          // Only dash when it pays off: the enemy is contesting the sofa or closer to it than we are,
+          // is roughly in front, and we roll below the attempt chance.
+          const enemyOnSeat = dist(other, game.seat) < 89;
+          const enemyCloser = dist(other, game.seat) < seatDistance;
           const inFront = (dx * p.facingX + dy * p.facingY) > 0.3;
-          useNow = enemyDistance > 45 && enemyDistance < 145 && inFront && Math.random() < skillAccuracy;
+          useNow = enemyDistance > 45 && enemyDistance < 145 && inFront && (enemyOnSeat || enemyCloser) && Math.random() < attemptChance;
         } else if (skill.kind === 'shield') {
           const enemyClose = enemyDistance < (opposingSkill === 'blink' ? 180 : opposingSkill === 'dash' ? 160 : 125);
           const enemyCommitting = other.dashLeft > 0 || other.castLeft > 0;
-          useNow = enemyClose && (difficulty === 'hard' ? enemyCommitting : Math.random() < skillAccuracy);
+          useNow = enemyClose && (difficulty === 'hard' ? enemyCommitting && Math.random() < attemptChance + .2 : Math.random() < attemptChance);
         } else if (skill.kind === 'pull') {
-          useNow = enemyDistance < skill.radius && Math.random() < skillAccuracy;
+          useNow = enemyDistance < skill.radius && Math.random() < attemptChance;
         } else if (skill.kind === 'blink') {
           const shouldBlink = seatDistance > 150 || (enemyDistance < 170 && aggression > 0.4);
-          useNow = shouldBlink && Math.random() < skillAccuracy;
+          useNow = shouldBlink && Math.random() < attemptChance;
         } else if (skill.kind === 'trap') {
           const goodSpot = nearSeat || enemyDistance < 115;
-          useNow = !p.trap && goodSpot && Math.random() < skillAccuracy;
+          useNow = !p.trap && goodSpot && Math.random() < attemptChance;
         } else {
-          useNow = enemyDistance < skill.radius && Math.random() < skillAccuracy;
+          useNow = enemyDistance < skill.radius && Math.random() < attemptChance;
         }
 
         if (useNow) {
@@ -846,6 +852,10 @@
           p.facingY = (faceTarget.y - p.y) / faceDistance;
           p.wantsSkill = true;
           p.aiDecision = reactionTime;
+        } else {
+          // No good opportunity right now: re-evaluate later instead of every frame,
+          // so the AI never fires skills with frame-perfect timing.
+          p.aiDecision = 0.25 + Math.random() * 0.35;
         }
       }
       return { x: dx, y: dy };
