@@ -1,26 +1,16 @@
 (() => {
   'use strict';
 
-  // Firebase configuration - using a free Firebase project
-  const firebaseConfig = {
-    apiKey: "AIzaSyBxKQ8vJ9mZ5nF3pL7wR2tY6uI8oP0qA",
-    authDomain: "sofa-duel-online.firebaseapp.com",
-    databaseURL: "https://sofa-duel-online-default-rtdb.firebaseio.com",
-    projectId: "sofa-duel-online",
-    storageBucket: "sofa-duel-online.appspot.com",
-    messagingSenderId: "123456789",
-    appId: "1:123456789:web:abcdef123456"
-  };
+  // PeerJS for WebRTC peer-to-peer connections (free signaling server)
+  // No backend configuration needed!
 
-  // Simple Firebase REST API client (no SDK needed)
   class SofaNetwork {
     constructor() {
+      this.peer = null;
+      this.conn = null;
       this.roomId = null;
       this.playerId = null;
-      this.playerNumber = null; // 0 or 1
-      this.db = null;
-      this.roomRef = null;
-      this.listeners = [];
+      this.playerNumber = null; // 0 = host, 1 = client
       this.connected = false;
       this.onStateChange = null;
       this.onPlayerJoin = null;
@@ -28,15 +18,15 @@
       this.onGameStart = null;
       this.onGameEnd = null;
       this.onChat = null;
-      this.reconnectTimer = null;
-      this.heartbeatTimer = null;
-      this.lastHeartbeat = Date.now();
+      this.onData = null;
+      this.reconnectAttempts = 0;
+      this.maxReconnectAttempts = 3;
     }
 
     // Generate a short room code (6 characters)
     generateRoomCode() {
       const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-      let code = '';
+      let code = 'sofa-';
       for (let i = 0; i < 6; i++) {
         code += chars.charAt(Math.floor(Math.random() * chars.length));
       }
@@ -45,334 +35,279 @@
 
     // Generate a unique player ID
     generatePlayerId() {
-      return 'p_' + Math.random().toString(36).substr(2, 9) + Date.now().toString(36);
+      return 'player_' + Math.random().toString(36).substr(2, 9) + Date.now().toString(36);
     }
 
-    // Firebase REST API helpers
-    async firebaseGet(path) {
-      try {
-        const response = await fetch(`${firebaseConfig.databaseURL}${path}.json`);
-        if (!response.ok) throw new Error('Firebase GET failed');
-        return await response.json();
-      } catch (error) {
-        console.error('Firebase GET error:', error);
-        return null;
-      }
+    // Load PeerJS library dynamically
+    async loadPeerJS() {
+      if (window.Peer) return;
+      return new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = 'https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js';
+        script.onload = resolve;
+        script.onerror = reject;
+        document.head.appendChild(script);
+      });
     }
 
-    async firebaseSet(path, data) {
-      try {
-        const response = await fetch(`${firebaseConfig.databaseURL}${path}.json`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(data)
-        });
-        if (!response.ok) throw new Error('Firebase SET failed');
-        return await response.json();
-      } catch (error) {
-        console.error('Firebase SET error:', error);
-        return null;
-      }
-    }
-
-    async firebaseUpdate(path, data) {
-      try {
-        const response = await fetch(`${firebaseConfig.databaseURL}${path}.json`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(data)
-        });
-        if (!response.ok) throw new Error('Firebase UPDATE failed');
-        return await response.json();
-      } catch (error) {
-        console.error('Firebase UPDATE error:', error);
-        return null;
-      }
-    }
-
-    async firebasePush(path, data) {
-      try {
-        const response = await fetch(`${firebaseConfig.databaseURL}${path}.json`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(data)
-        });
-        if (!response.ok) throw new Error('Firebase PUSH failed');
-        return await response.json();
-      } catch (error) {
-        console.error('Firebase PUSH error:', error);
-        return null;
-      }
-    }
-
-    async firebaseDelete(path) {
-      try {
-        const response = await fetch(`${firebaseConfig.databaseURL}${path}.json`, {
-          method: 'DELETE'
-        });
-        if (!response.ok) throw new Error('Firebase DELETE failed');
-        return true;
-      } catch (error) {
-        console.error('Firebase DELETE error:', error);
-        return false;
-      }
-    }
-
-    // Create a new room
+    // Create a new room (host)
     async createRoom() {
-      this.roomId = this.generateRoomCode();
-      this.playerId = this.generatePlayerId();
-      this.playerNumber = 0;
+      try {
+        await this.loadPeerJS();
 
-      const roomData = {
-        code: this.roomId,
-        host: this.playerId,
-        created: Date.now(),
-        status: 'waiting', // waiting, playing, finished
-        players: {
-          [this.playerId]: {
-            id: this.playerId,
-            number: 0,
-            character: null,
-            name: 'Player 1',
-            joined: Date.now(),
-            lastSeen: Date.now()
-          }
-        },
-        game: {
-          phase: 'waiting',
-          scores: [0, 0],
-          time: 18,
-          rule: null,
-          seat: { x: 480, y: 312 },
-          players: [
-            { x: 220, y: 360, vx: 0, vy: 0, character: null, skillCooldown: 0, stunned: 0 },
-            { x: 740, y: 360, vx: 0, vy: 0, character: null, skillCooldown: 0, stunned: 0 }
-          ]
-        },
-        chat: []
-      };
+        this.roomId = this.generateRoomCode();
+        this.playerId = this.roomId; // Host uses room ID as peer ID
+        this.playerNumber = 0;
 
-      await this.firebaseSet(`/rooms/${this.roomId}`, roomData);
-      this.connected = true;
-      this.startHeartbeat();
-      this.startListening();
+        return new Promise((resolve, reject) => {
+          this.peer = new Peer(this.playerId, {
+            debug: 1,
+            config: {
+              iceServers: [
+                { urls: 'stun:stun.l.google.com:19302' },
+                { urls: 'stun:stun1.l.google.com:19302' }
+              ]
+            }
+          });
 
-      return { roomId: this.roomId, playerId: this.playerId, playerNumber: 0 };
+          this.peer.on('open', (id) => {
+            console.log('Room created with ID:', id);
+            this.connected = true;
+            resolve({ roomId: this.roomId, playerId: this.playerId, playerNumber: 0 });
+          });
+
+          this.peer.on('connection', (conn) => {
+            this.handleConnection(conn);
+          });
+
+          this.peer.on('error', (err) => {
+            console.error('Peer error:', err);
+            if (err.type === 'unavailable-id') {
+              reject({ error: '房间号已存在，请重试' });
+            } else {
+              reject({ error: '创建房间失败：' + err.type });
+            }
+          });
+
+          // Timeout after 30 seconds
+          setTimeout(() => {
+            if (!this.connected) {
+              reject({ error: '创建房间超时' });
+            }
+          }, 30000);
+        });
+      } catch (error) {
+        return { error: '加载网络库失败：' + error.message };
+      }
     }
 
-    // Join an existing room
+    // Join an existing room (client)
     async joinRoom(roomCode) {
-      roomCode = roomCode.toUpperCase().trim();
+      try {
+        await this.loadPeerJS();
 
-      // Check if room exists
-      const room = await this.firebaseGet(`/rooms/${roomCode}`);
-      if (!room) {
-        return { error: '房间不存在' };
+        roomCode = roomCode.toUpperCase().trim();
+        this.roomId = roomCode;
+        this.playerId = this.generatePlayerId();
+        this.playerNumber = 1;
+
+        return new Promise((resolve, reject) => {
+          this.peer = new Peer(this.playerId, {
+            debug: 1,
+            config: {
+              iceServers: [
+                { urls: 'stun:stun.l.google.com:19302' },
+                { urls: 'stun:stun1.l.google.com:19302' }
+              ]
+            }
+          });
+
+          this.peer.on('open', () => {
+            console.log('Connecting to room:', roomCode);
+            const conn = this.peer.connect(roomCode, {
+              reliable: true,
+              metadata: { playerNumber: 1 }
+            });
+
+            this.handleConnection(conn);
+
+            // Timeout after 15 seconds
+            setTimeout(() => {
+              if (!this.connected) {
+                reject({ error: '连接超时，请检查房间号' });
+              }
+            }, 15000);
+          });
+
+          this.peer.on('error', (err) => {
+            console.error('Peer error:', err);
+            if (err.type === 'peer-unavailable') {
+              reject({ error: '房间不存在或已关闭' });
+            } else {
+              reject({ error: '连接失败：' + err.type });
+            }
+          });
+
+          // Wait for connection to be established
+          const checkConnection = setInterval(() => {
+            if (this.connected) {
+              clearInterval(checkConnection);
+              resolve({ roomId: roomCode, playerId: this.playerId, playerNumber: 1 });
+            }
+          }, 100);
+
+          setTimeout(() => clearInterval(checkConnection), 15000);
+        });
+      } catch (error) {
+        return { error: '加载网络库失败：' + error.message };
       }
+    }
 
-      if (room.status !== 'waiting') {
-        return { error: '房间已开始游戏' };
-      }
+    // Handle incoming connection
+    handleConnection(conn) {
+      this.conn = conn;
 
-      const playerCount = Object.keys(room.players || {}).length;
-      if (playerCount >= 2) {
-        return { error: '房间已满' };
-      }
+      conn.on('open', () => {
+        console.log('Connection established!');
+        this.connected = true;
+        this.reconnectAttempts = 0;
 
-      this.roomId = roomCode;
-      this.playerId = this.generatePlayerId();
-      this.playerNumber = 1;
-
-      // Add player to room
-      await this.firebaseUpdate(`/rooms/${roomCode}/players/${this.playerId}`, {
-        id: this.playerId,
-        number: 1,
-        character: null,
-        name: 'Player 2',
-        joined: Date.now(),
-        lastSeen: Date.now()
+        if (this.onPlayerJoin) {
+          this.onPlayerJoin(this.playerNumber === 0 ? 1 : 0);
+        }
       });
 
-      // Update room status if both players are present
-      const updatedRoom = await this.firebaseGet(`/rooms/${roomCode}`);
-      if (updatedRoom && Object.keys(updatedRoom.players || {}).length >= 2) {
-        await this.firebaseUpdate(`/rooms/${roomCode}`, { status: 'ready' });
+      conn.on('data', (data) => {
+        this.handleData(data);
+      });
+
+      conn.on('close', () => {
+        console.log('Connection closed');
+        this.connected = false;
+        if (this.onPlayerLeave) {
+          this.onPlayerLeave();
+        }
+      });
+
+      conn.on('error', (err) => {
+        console.error('Connection error:', err);
+      });
+    }
+
+    // Handle received data
+    handleData(data) {
+      if (!data || !data.type) return;
+
+      switch (data.type) {
+        case 'gameState':
+          if (this.onStateChange) this.onStateChange(data.state);
+          break;
+        case 'input':
+          if (this.onData) this.onData(data);
+          break;
+        case 'characterSelect':
+          if (this.onStateChange) this.onStateChange({ type: 'characterSelect', character: data.character, playerNumber: data.playerNumber });
+          break;
+        case 'gameStart':
+          if (this.onGameStart) this.onGameStart();
+          break;
+        case 'gameEnd':
+          if (this.onGameEnd) this.onGameEnd(data.result);
+          break;
+        case 'chat':
+          if (this.onChat) this.onChat(data.message);
+          break;
       }
-
-      this.connected = true;
-      this.startHeartbeat();
-      this.startListening();
-
-      return { roomId: roomCode, playerId: this.playerId, playerNumber: 1 };
     }
 
     // Leave the current room
     async leaveRoom() {
-      if (!this.roomId || !this.playerId) return;
-
-      await this.firebaseDelete(`/rooms/${this.roomId}/players/${this.playerId}`);
-
-      // Check if room is now empty
-      const room = await this.firebaseGet(`/rooms/${this.roomId}`);
-      if (room && Object.keys(room.players || {}).length === 0) {
-        await this.firebaseDelete(`/rooms/${this.roomId}`);
+      if (this.conn) {
+        this.conn.close();
+        this.conn = null;
       }
-
-      this.stopHeartbeat();
-      this.stopListening();
+      if (this.peer) {
+        this.peer.destroy();
+        this.peer = null;
+      }
       this.connected = false;
       this.roomId = null;
       this.playerId = null;
       this.playerNumber = null;
     }
 
-    // Update player character selection
-    async selectCharacter(characterId) {
-      if (!this.roomId || !this.playerId) return;
+    // Send game state (from host)
+    sendGameState(gameState) {
+      if (!this.conn || !this.connected || this.playerNumber !== 0) return;
 
-      await this.firebaseUpdate(`/rooms/${this.roomId}/players/${this.playerId}`, {
-        character: characterId,
-        lastSeen: Date.now()
-      });
-
-      // Check if both players have selected characters
-      const room = await this.firebaseGet(`/rooms/${this.roomId}`);
-      if (room) {
-        const players = Object.values(room.players || {});
-        const allReady = players.length >= 2 && players.every(p => p.character);
-        if (allReady && room.status === 'ready') {
-          await this.firebaseUpdate(`/rooms/${this.roomId}`, { status: 'playing' });
-          if (this.onGameStart) this.onGameStart();
-        }
-      }
-    }
-
-    // Send game state update (from host)
-    async sendGameState(gameState) {
-      if (!this.roomId || this.playerNumber !== 0) return;
-
-      await this.firebaseUpdate(`/rooms/${this.roomId}/game`, {
-        phase: gameState.phase,
-        scores: gameState.scores,
-        time: gameState.time,
-        rule: gameState.rule,
-        seat: gameState.seat,
-        players: gameState.players.map(p => ({
-          x: p.x,
-          y: p.y,
-          vx: p.vx,
-          vy: p.vy,
-          character: p.characterId,
-          skillCooldown: p.skillCooldown,
-          stunned: p.stunned,
-          emotion: p.emotion,
-          dashLeft: p.dashLeft,
-          shieldLeft: p.shieldLeft,
-          pulseLeft: p.pulseLeft,
-          pullLeft: p.pullLeft,
-          warpLeft: p.warpLeft,
-          reboundLeft: p.reboundLeft,
-          trap: p.trap
-        })),
-        lastUpdate: Date.now()
+      this.conn.send({
+        type: 'gameState',
+        state: gameState,
+        timestamp: Date.now()
       });
     }
 
     // Send input (from client)
-    async sendInput(input) {
-      if (!this.roomId || !this.playerId) return;
+    sendInput(input) {
+      if (!this.conn || !this.connected) return;
 
-      await this.firebaseUpdate(`/rooms/${this.roomId}/players/${this.playerId}/input`, {
-        keys: Array.from(input.keys || []),
-        mobile: input.mobile || { x: 0, y: 0 },
-        skill: input.skill || false,
+      this.conn.send({
+        type: 'input',
+        input: input,
+        timestamp: Date.now()
+      });
+    }
+
+    // Send character selection
+    sendCharacterSelect(characterId) {
+      if (!this.conn || !this.connected) return;
+
+      this.conn.send({
+        type: 'characterSelect',
+        character: characterId,
+        playerNumber: this.playerNumber,
+        timestamp: Date.now()
+      });
+    }
+
+    // Send game start signal
+    sendGameStart() {
+      if (!this.conn || !this.connected) return;
+
+      this.conn.send({
+        type: 'gameStart',
+        timestamp: Date.now()
+      });
+
+      if (this.onGameStart) this.onGameStart();
+    }
+
+    // Send game end signal
+    sendGameEnd(result) {
+      if (!this.conn || !this.connected) return;
+
+      this.conn.send({
+        type: 'gameEnd',
+        result: result,
         timestamp: Date.now()
       });
     }
 
     // Send chat message
-    async sendChat(message) {
-      if (!this.roomId || !this.playerId) return;
+    sendChat(message) {
+      if (!this.conn || !this.connected) return;
 
-      await this.firebasePush(`/rooms/${this.roomId}/chat`, {
-        player: this.playerNumber,
+      this.conn.send({
+        type: 'chat',
         message: message,
+        playerNumber: this.playerNumber,
         timestamp: Date.now()
       });
     }
 
-    // Start listening for room updates
-    startListening() {
-      this.stopListening();
-
-      // Poll for updates every 100ms (Firebase REST doesn't support real-time without SDK)
-      this.pollTimer = setInterval(async () => {
-        if (!this.roomId) return;
-
-        const room = await this.firebaseGet(`/rooms/${this.roomId}`);
-        if (!room) {
-          // Room was deleted
-          if (this.onPlayerLeave) this.onPlayerLeave();
-          this.leaveRoom();
-          return;
-        }
-
-        // Check if other player is still connected
-        const players = Object.values(room.players || {});
-        const otherPlayer = players.find(p => p.number !== this.playerNumber);
-
-        if (otherPlayer) {
-          const timeSinceLastSeen = Date.now() - (otherPlayer.lastSeen || 0);
-          if (timeSinceLastSeen > 10000) {
-            // Other player disconnected
-            if (this.onPlayerLeave) this.onPlayerLeave(otherPlayer.number);
-          }
-        }
-
-        if (this.onStateChange) {
-          this.onStateChange(room);
-        }
-      }, 100);
-    }
-
-    stopListening() {
-      if (this.pollTimer) {
-        clearInterval(this.pollTimer);
-        this.pollTimer = null;
-      }
-    }
-
-    // Start heartbeat to show we're alive
-    startHeartbeat() {
-      this.stopHeartbeat();
-      this.heartbeatTimer = setInterval(async () => {
-        if (!this.roomId || !this.playerId) return;
-
-        await this.firebaseUpdate(`/rooms/${this.roomId}/players/${this.playerId}`, {
-          lastSeen: Date.now()
-        });
-      }, 3000);
-    }
-
-    stopHeartbeat() {
-      if (this.heartbeatTimer) {
-        clearInterval(this.heartbeatTimer);
-        this.heartbeatTimer = null;
-      }
-    }
-
-    // Clean up old rooms (older than 1 hour)
-    async cleanupOldRooms() {
-      const rooms = await this.firebaseGet('/rooms');
-      if (!rooms) return;
-
-      const oneHourAgo = Date.now() - 3600000;
-      for (const [code, room] of Object.entries(rooms)) {
-        if (room.created && room.created < oneHourAgo) {
-          await this.firebaseDelete(`/rooms/${code}`);
-        }
-      }
+    // Check connection status
+    isConnected() {
+      return this.connected && this.conn && this.conn.open;
     }
   }
 

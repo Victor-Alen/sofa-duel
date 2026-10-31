@@ -356,6 +356,24 @@
     const winner = game.scores[0] > game.scores[1] ? 0 : 1;
     updateStats(winner);
     stopBackgroundMusic();
+
+    // Handle online mode
+    if (game.mode === 'online' && network) {
+      if (onlineGameInterval) {
+        clearInterval(onlineGameInterval);
+        onlineGameInterval = null;
+      }
+      $('online-game-hud').hidden = true;
+
+      // Host sends game end signal
+      if (onlinePlayerNumber === 0) {
+        network.sendGameEnd({ winner: winner, scores: game.scores });
+      }
+
+      // Return to online menu after delay
+      setTimeout(() => leaveOnlineRoom(), 3000);
+    }
+
     $('result-title').textContent = `${CHARACTERS[game.picks[winner]].name}霸占沙发！`;
     $('result-subtitle').textContent = game.mode === 'demo' ? '自动演示即将重新开始。' : winner === 0 ? '这张沙发，今晚归你。' : '再抢一次？';
     $('result-rule').textContent = `最近规则：${game.ruleHistory.slice(-3).map(id => RULES[id].name).join(' → ')}`;
@@ -369,8 +387,9 @@
     const waitingForOpponent = game.mode === 'cpu' && !document.body.classList.contains('in-match');
     $('control-tip').textContent = game.mode === 'demo' ? '电脑自动对战，点击开始观看' :
       game.mode === 'duo' ? '玩家一 WASD / 空格 · 玩家二 方向键 / 回车' :
+      game.mode === 'online' ? '联网对战 · 创建或加入房间' :
       narrowScreen() ? '左侧摇杆移动 · 右侧按钮放技能' : 'WASD 移动 · 空格放技能';
-    $('start-btn').firstChild.textContent = game.mode === 'demo' ? '开始观看演示 ' : '开始抢沙发 ';
+    $('start-btn').firstChild.textContent = game.mode === 'demo' ? '开始观看演示 ' : game.mode === 'online' ? '进入联网模式 ' : '开始抢沙发 ';
     $('player-a-label').textContent = `${game.mode === 'demo' ? '电脑' : '玩家一'}·${CHARACTERS[game.picks[0]].name}`;
     $('player-b-label').textContent = waitingForOpponent ? '随机对手' : `${game.mode === 'demo' || game.mode === 'cpu' ? '电脑' : '玩家二'}·${CHARACTERS[game.picks[1]].name}`;
     for (let i = 0; i < 2; i++) {
@@ -387,7 +406,7 @@
     $('dash-touch').style.background = CHARACTERS[game.picks[0]].color;
     $('dash-touch').style.borderBottomColor = CHARACTERS[game.picks[0]].dark;
     $('picker-b-row').hidden = game.mode !== 'duo';
-    document.querySelector('.pickers').hidden = game.mode === 'demo';
+    document.querySelector('.pickers').hidden = game.mode === 'demo' || game.mode === 'online';
     renderPickers();
   }
 
@@ -453,6 +472,8 @@
     $('pause-btn').setAttribute('aria-label', '暂停游戏');
     $('result-screen').classList.remove('visible');
     $('pause-screen').classList.remove('visible');
+    $('online-screen').classList.remove('visible');
+    $('online-game-hud').hidden = true;
     $('start-screen').classList.add('visible');
     $('round-banner').classList.remove('show');
     $('play-tip').classList.remove('show');
@@ -1345,12 +1366,19 @@
     if (game.phase !== 'menu' && game.phase !== 'finished') return;
     game.mode = btn.dataset.mode;
     syncMode();
+    if (game.mode === 'online') showOnlineScreen();
   }));
   $('fullscreen-btn').addEventListener('click', enterFullscreen);
   $('exit-fullscreen-btn').addEventListener('click', exitFullscreen);
   $('demo-btn').addEventListener('click', () => { game.mode = 'demo'; syncMode(); startMatch(); enterFullscreen(); });
   $('stop-demo-btn').addEventListener('click', stopDemo);
-  $('start-btn').addEventListener('click', startMatch);
+  $('start-btn').addEventListener('click', () => {
+    if (game.mode === 'online') {
+      showOnlineScreen();
+    } else {
+      startMatch();
+    }
+  });
   $('again-btn').addEventListener('click', startMatch);
   $('change-btn').addEventListener('click', () => returnToMenu(game.mode));
   $('resume-btn').addEventListener('click', togglePause);
@@ -1427,6 +1455,294 @@
   stick.addEventListener('pointercancel', stickEnd);
   stick.addEventListener('lostpointercapture', stickEnd);
   $('dash-touch').addEventListener('pointerdown', e => { e.preventDefault(); useSkill(players[0]); });
+
+  // Online Multiplayer Functions (PeerJS WebRTC)
+  let network = null;
+  let onlineState = 'menu'; // menu, waiting, character-select, playing
+  let onlineRoomCode = null;
+  let onlinePlayerNumber = null;
+  let onlineOpponentCharacter = null;
+  let onlineGameInterval = null;
+  let onlineOpponentInput = { keys: new Set(), mobile: { x: 0, y: 0 }, skill: false };
+
+  function showOnlineScreen() {
+    hideAllScreens();
+    $('online-screen').classList.add('visible');
+    $('online-menu').hidden = false;
+    $('online-waiting').hidden = true;
+    $('online-character-select').hidden = true;
+    $('back-to-menu-btn').hidden = true;
+    onlineState = 'menu';
+  }
+
+  function hideAllScreens() {
+    document.querySelectorAll('.screen').forEach(s => s.classList.remove('visible'));
+  }
+
+  async function createRoom() {
+    if (!network) network = new window.SofaNetwork();
+
+    $('online-menu').hidden = true;
+    $('online-waiting').hidden = false;
+    $('back-to-menu-btn').hidden = false;
+    onlineState = 'waiting';
+
+    const result = await network.createRoom();
+    if (result.error) {
+      alert(result.error);
+      showOnlineScreen();
+      return;
+    }
+
+    onlineRoomCode = result.roomId;
+    onlinePlayerNumber = result.playerNumber;
+    $('room-code').textContent = onlineRoomCode;
+
+    network.onPlayerJoin = () => {
+      // Opponent joined, move to character select
+      onlineState = 'character-select';
+      $('online-waiting').hidden = true;
+      $('online-character-select').hidden = false;
+      showOnlineCharacterSelect();
+    };
+
+    network.onPlayerLeave = () => {
+      alert('对手已断开连接');
+      leaveOnlineRoom();
+    };
+
+    network.onData = (data) => {
+      if (data.type === 'characterSelect') {
+        onlineOpponentCharacter = data.character;
+        $('online-p2-char').textContent = CHARACTERS[data.character].name;
+        $('online-p2-status').classList.add('ready');
+
+        // If I already selected, start game
+        if (game.manualPicks[onlinePlayerNumber]) {
+          startOnlineGame();
+        }
+      } else if (data.type === 'input') {
+        onlineOpponentInput = data.input;
+      }
+    };
+  }
+
+  async function joinRoom() {
+    const code = $('room-code-input').value.trim();
+    if (!code) {
+      alert('请输入房间号');
+      return;
+    }
+
+    if (!network) network = new window.SofaNetwork();
+
+    $('online-menu').hidden = true;
+    $('online-waiting').hidden = false;
+    $('back-to-menu-btn').hidden = false;
+    onlineState = 'waiting';
+
+    const result = await network.joinRoom(code);
+    if (result.error) {
+      alert(result.error);
+      showOnlineScreen();
+      return;
+    }
+
+    onlineRoomCode = result.roomId;
+    onlinePlayerNumber = result.playerNumber;
+
+    // Show waiting screen with note
+    $('room-code').textContent = '已连接';
+    document.querySelector('.waiting-text').textContent = '等待房主开始...';
+
+    network.onPlayerLeave = () => {
+      alert('与房主断开连接');
+      leaveOnlineRoom();
+    };
+
+    network.onData = (data) => {
+      if (data.type === 'characterSelect') {
+        onlineOpponentCharacter = data.character;
+        $('online-p2-char').textContent = CHARACTERS[data.character].name;
+        $('online-p2-status').classList.add('ready');
+      } else if (data.type === 'gameState') {
+        // Client receives game state from host
+        applyRemoteGameState(data.state);
+      } else if (data.type === 'gameStart') {
+        startOnlineGameAsClient();
+      }
+    };
+  }
+
+  function showOnlineCharacterSelect() {
+    const picker = $('online-picker');
+    picker.innerHTML = '';
+    CHARACTER_IDS.forEach(id => {
+      const char = CHARACTERS[id];
+      const btn = document.createElement('button');
+      btn.className = 'character-choice';
+      btn.innerHTML = `<span class="choice-avatar" style="background:${char.color}">${char.icon}</span><div><strong>${char.name}</strong><small>${char.skill.name}</small></div>`;
+      btn.addEventListener('click', () => selectOnlineCharacter(id, btn));
+      picker.appendChild(btn);
+    });
+  }
+
+  function selectOnlineCharacter(characterId, btn) {
+    if (!network) return;
+
+    game.manualPicks[onlinePlayerNumber] = characterId;
+    game.picks[onlinePlayerNumber] = characterId;
+
+    // Send to opponent
+    network.sendCharacterSelect(characterId);
+
+    // Update UI
+    $('online-p1-char').textContent = CHARACTERS[characterId].name;
+    document.querySelectorAll('#online-picker .character-choice').forEach(b => {
+      b.style.opacity = '0.5';
+      b.style.boxShadow = 'none';
+    });
+    btn.style.opacity = '1';
+    btn.style.boxShadow = '0 0 0 3px #4caf50';
+
+    // If opponent already selected, start game
+    if (onlineOpponentCharacter) {
+      startOnlineGame();
+    }
+  }
+
+  function startOnlineGame() {
+    onlineState = 'playing';
+    hideAllScreens();
+    $('online-game-hud').hidden = false;
+
+    // Set opponent character
+    if (onlineOpponentCharacter) {
+      game.manualPicks[1 - onlinePlayerNumber] = onlineOpponentCharacter;
+      $('online-opponent-name').textContent = `对手 (${CHARACTERS[onlineOpponentCharacter].name})`;
+    }
+
+    game.picks = [...game.manualPicks];
+    game.mode = 'duo'; // Treat as local duo for game logic
+    syncMode();
+    startMatch();
+
+    // Host sends game state
+    if (onlinePlayerNumber === 0) {
+      onlineGameInterval = setInterval(() => {
+        if (game.phase === 'playing' && network.isConnected()) {
+          network.sendGameState({
+            phase: game.phase,
+            scores: game.scores,
+            time: game.time,
+            rule: game.rule ? game.rule.id : null,
+            seat: game.seat,
+            players: players.map(p => ({
+              x: p.x,
+              y: p.y,
+              vx: p.vx,
+              vy: p.vy,
+              characterId: p.characterId,
+              skillCooldown: p.skillCooldown,
+              stunned: p.stunned,
+              emotion: p.emotion
+            }))
+          });
+        }
+      }, 100);
+    }
+  }
+
+  function startOnlineGameAsClient() {
+    onlineState = 'playing';
+    hideAllScreens();
+    $('online-game-hud').hidden = false;
+
+    game.mode = 'duo';
+    syncMode();
+
+    // Client sends input
+    onlineGameInterval = setInterval(() => {
+      if (game.phase === 'playing' && network.isConnected()) {
+        network.sendInput({
+          keys: Array.from(keys),
+          mobile: { x: mobile.x, y: mobile.y },
+          skill: false
+        });
+      }
+    }, 50);
+  }
+
+  function applyRemoteGameState(state) {
+    if (!state) return;
+
+    // Apply remote game state for client
+    game.phase = state.phase;
+    game.scores = state.scores;
+    game.time = state.time;
+
+    if (state.rule) {
+      const ruleId = typeof state.rule === 'string' ? state.rule : state.rule.id;
+      game.rule = RULES[ruleId];
+    }
+
+    if (state.seat) {
+      game.seat = state.seat;
+    }
+
+    // Update player positions from host
+    if (state.players && state.players.length >= 2) {
+      const remotePlayerIdx = 1 - onlinePlayerNumber;
+      const remotePlayer = state.players[remotePlayerIdx];
+      if (remotePlayer && players[remotePlayerIdx]) {
+        players[remotePlayerIdx].x = remotePlayer.x;
+        players[remotePlayerIdx].y = remotePlayer.y;
+        players[remotePlayerIdx].vx = remotePlayer.vx;
+        players[remotePlayerIdx].vy = remotePlayer.vy;
+      }
+    }
+
+    updateHud();
+  }
+
+  function endOnlineGame() {
+    if (onlineGameInterval) {
+      clearInterval(onlineGameInterval);
+      onlineGameInterval = null;
+    }
+    $('online-game-hud').hidden = true;
+  }
+
+  async function leaveOnlineRoom() {
+    if (network) {
+      await network.leaveRoom();
+      network = null;
+    }
+    if (onlineGameInterval) {
+      clearInterval(onlineGameInterval);
+      onlineGameInterval = null;
+    }
+    $('online-game-hud').hidden = true;
+    onlineOpponentCharacter = null;
+    onlineOpponentInput = { keys: new Set(), mobile: { x: 0, y: 0 }, skill: false };
+    showOnlineScreen();
+  }
+
+  // Online button event listeners
+  $('create-room-btn').addEventListener('click', createRoom);
+  $('join-room-btn').addEventListener('click', joinRoom);
+  $('room-code-input').addEventListener('keypress', e => {
+    if (e.key === 'Enter') joinRoom();
+  });
+  $('copy-code-btn').addEventListener('click', () => {
+    navigator.clipboard.writeText(onlineRoomCode).then(() => {
+      const btn = $('copy-code-btn');
+      btn.textContent = '✓';
+      setTimeout(() => btn.textContent = '📋', 2000);
+    });
+  });
+  $('cancel-waiting-btn').addEventListener('click', leaveOnlineRoom);
+  $('back-to-menu-btn').addEventListener('click', leaveOnlineRoom);
 
   syncMode();
   resetPlayers();
