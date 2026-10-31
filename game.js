@@ -22,13 +22,29 @@
   // All starting spots are centered horizontally so neither side starts closer.
   const seatSpots = [[480, 312], [480, 255], [480, 365]];
   const narrowScreen = () => window.matchMedia('(max-width: 760px)').matches;
+  const isDesktop = () => !narrowScreen() && !('ontouchstart' in window) && window.innerWidth > 760;
+
+  // Apply desktop fullscreen mode automatically
+  if (isDesktop()) {
+    document.body.classList.add('desktop-mode');
+  }
+
+  // Listen for resize to toggle desktop mode
+  window.addEventListener('resize', () => {
+    if (isDesktop()) {
+      document.body.classList.add('desktop-mode');
+    } else {
+      document.body.classList.remove('desktop-mode');
+    }
+  });
+
   const players = [makePlayer(0), makePlayer(1)];
   const highlightPool = Array.from({ length: HIGHLIGHT_FRAME_COUNT }, () => {
     const frame = document.createElement('canvas');
     frame.width = 480; frame.height = 270;
     return frame;
   });
-  const game = { mode: 'cpu', phase: 'menu', manualPicks: ['dash', 'guard'], picks: ['dash', 'guard'], scores: [0, 0], capture: [0, 0], time: ROUND_SECONDS, seat: { x: 480, y: 312 }, previousSeatY: null, rule: null, previousRule: null, ruleHistory: [], ruleTarget: null, ruleMove: null, rulePhase: 'idle', elapsed: 0, round: 0, tiedRounds: 0, wait: 0, bannerTime: 0, playTipTime: 0, bannerText: '', particles: [], shake: 0, hitStop: 0, paused: false, audio: true, audioContext: null, replay: null, highlightFrames: [], highlightClock: 0, lastImpact: null, combo: [0, 0], maxCombo: [0, 0], stats: loadStats(), music: null, musicGain: null, achievementQueue: [], currentAchievement: null };
+  const game = { mode: 'cpu', difficulty: 'normal', phase: 'menu', manualPicks: ['dash', 'guard'], picks: ['dash', 'guard'], scores: [0, 0], capture: [0, 0], time: ROUND_SECONDS, seat: { x: 480, y: 312 }, previousSeatY: null, rule: null, previousRule: null, ruleHistory: [], ruleTarget: null, ruleMove: null, rulePhase: 'idle', elapsed: 0, round: 0, tiedRounds: 0, wait: 0, bannerTime: 0, playTipTime: 0, bannerText: '', particles: [], shake: 0, hitStop: 0, paused: false, audio: true, audioContext: null, replay: null, highlightFrames: [], highlightClock: 0, lastImpact: null, combo: [0, 0], maxCombo: [0, 0], stats: loadStats(), music: null, musicGain: null, achievementQueue: [], currentAchievement: null };
   let last = performance.now();
 
   function makePlayer(i) {
@@ -407,6 +423,8 @@
     $('dash-touch').style.borderBottomColor = CHARACTERS[game.picks[0]].dark;
     $('picker-b-row').hidden = game.mode !== 'duo';
     document.querySelector('.pickers').hidden = game.mode === 'demo' || game.mode === 'online';
+    const diffSelector = $('difficulty-selector');
+    if (diffSelector) diffSelector.hidden = game.mode !== 'cpu';
     renderPickers();
   }
 
@@ -752,31 +770,79 @@
       const nearOther = enemyDistance < 145;
       const contested = dist(other, game.seat) < 89;
       const hostileTrap = other.trap;
+
+      // Difficulty-based parameters
+      const difficulty = game.difficulty || 'normal';
+      const reactionTime = difficulty === 'easy' ? 0.8 : difficulty === 'normal' ? 0.55 : 0.35;
+      const skillAccuracy = difficulty === 'easy' ? 0.6 : difficulty === 'normal' ? 0.8 : 0.95;
+      const aggression = difficulty === 'easy' ? 0.3 : difficulty === 'normal' ? 0.5 : 0.7;
+
+      // Trap avoidance (all difficulties)
       if (hostileTrap && hostileTrap.arm <= 0 && dist(p, hostileTrap) < hostileTrap.radius + 24) {
         let avoidX = p.x - hostileTrap.x, avoidY = p.y - hostileTrap.y;
         const avoidLength = Math.hypot(avoidX, avoidY) || 1;
         if (avoidLength === 1 && avoidX === 0 && avoidY === 0) avoidX = p.i ? 1 : -1;
         return { x: avoidX / avoidLength, y: avoidY / avoidLength };
       }
+
+      // Hard difficulty: predict opponent blink/teleport and place trap
+      if (difficulty === 'hard' && other.warpLeft > 0 && p.characterId === 'trap' && !p.trap && p.skillCooldown <= 0) {
+        const predictX = other.x + other.facingX * skill.distance;
+        const predictY = other.y + other.facingY * skill.distance;
+        const predictDist = Math.hypot(predictX - p.x, predictY - p.y);
+        if (predictDist < 150) {
+          p.facingX = (predictX - p.x) / predictDist;
+          p.facingY = (predictY - p.y) / predictDist;
+          p.wantsSkill = true;
+          p.aiDecision = reactionTime;
+        }
+      }
+
       const target = nearSeat && (nearOther || contested) ? other : game.seat;
       let dx = target.x - p.x, dy = target.y - p.y;
       const length = Math.hypot(dx, dy);
       if (nearSeat && !nearOther && !contested) return { x: 0, y: 0 };
       if (length > 1) { dx /= length; dy /= length; }
+
+      // Easy difficulty: add slight movement noise
+      if (difficulty === 'easy' && Math.random() < 0.1) {
+        dx += (Math.random() - 0.5) * 0.3;
+        dy += (Math.random() - 0.5) * 0.3;
+      }
+
       p.aiDecision -= dt;
       const opposingSkill = CHARACTERS[other.characterId].skill.kind;
-      const useNow = skill.kind === 'dash' ? enemyDistance > 45 && enemyDistance < 145 :
-        skill.kind === 'shield' ? enemyDistance < (opposingSkill === 'blink' ? 180 : opposingSkill === 'dash' ? 160 : 125) :
-        skill.kind === 'pull' ? enemyDistance < skill.radius :
-        skill.kind === 'blink' ? seatDistance > 150 || enemyDistance < 170 :
-        skill.kind === 'trap' ? !p.trap && (nearSeat || enemyDistance < 115) : enemyDistance < skill.radius;
-      if (p.aiDecision <= 0 && other.stunned <= 0 && p.skillCooldown <= 0 && useNow && Math.random() < Math.min(1, dt * 8)) {
-        const faceTarget = skill.kind === 'blink' ? target : other;
-        const faceDistance = dist(p, faceTarget) || 1;
-        p.facingX = (faceTarget.x - p.x) / faceDistance;
-        p.facingY = (faceTarget.y - p.y) / faceDistance;
-        p.wantsSkill = true;
-        p.aiDecision = .55;
+
+      // Smarter skill usage based on difficulty
+      let useNow = false;
+      if (p.aiDecision <= 0 && other.stunned <= 0 && p.skillCooldown <= 0) {
+        if (skill.kind === 'dash') {
+          const inFront = (dx * p.facingX + dy * p.facingY) > 0.3;
+          useNow = enemyDistance > 45 && enemyDistance < 145 && inFront && Math.random() < skillAccuracy;
+        } else if (skill.kind === 'shield') {
+          const enemyClose = enemyDistance < (opposingSkill === 'blink' ? 180 : opposingSkill === 'dash' ? 160 : 125);
+          const enemyCommitting = other.dashLeft > 0 || other.castLeft > 0;
+          useNow = enemyClose && (difficulty === 'hard' ? enemyCommitting : Math.random() < skillAccuracy);
+        } else if (skill.kind === 'pull') {
+          useNow = enemyDistance < skill.radius && Math.random() < skillAccuracy;
+        } else if (skill.kind === 'blink') {
+          const shouldBlink = seatDistance > 150 || (enemyDistance < 170 && aggression > 0.4);
+          useNow = shouldBlink && Math.random() < skillAccuracy;
+        } else if (skill.kind === 'trap') {
+          const goodSpot = nearSeat || enemyDistance < 115;
+          useNow = !p.trap && goodSpot && Math.random() < skillAccuracy;
+        } else {
+          useNow = enemyDistance < skill.radius && Math.random() < skillAccuracy;
+        }
+
+        if (useNow) {
+          const faceTarget = skill.kind === 'blink' ? target : other;
+          const faceDistance = dist(p, faceTarget) || 1;
+          p.facingX = (faceTarget.x - p.x) / faceDistance;
+          p.facingY = (faceTarget.y - p.y) / faceDistance;
+          p.wantsSkill = true;
+          p.aiDecision = reactionTime;
+        }
       }
       return { x: dx, y: dy };
     }
@@ -912,6 +978,7 @@
   function update(dt) {
     if (game.paused) return;
     updatePresentation(dt);
+    updateRemoteInterpolation(dt);
     game.bannerTime = Math.max(0, game.bannerTime - dt);
     if (!game.bannerTime) $('round-banner').classList.remove('show');
     game.shake = Math.max(0, game.shake - dt);
@@ -1464,6 +1531,40 @@
   let onlineOpponentCharacter = null;
   let onlineGameInterval = null;
   let onlineOpponentInput = { keys: new Set(), mobile: { x: 0, y: 0 }, skill: false };
+  let connectionCheckInterval = null;
+
+  // Network interpolation state
+  let remoteInterpolation = {
+    prevX: 0, prevY: 0, prevVX: 0, prevVY: 0,
+    targetX: 0, targetY: 0, targetVX: 0, targetVY: 0,
+    interpTime: 0, interpDuration: 0.1, // 100ms interpolation
+    lastUpdateTime: 0
+  };
+  let networkLag = 0; // Current lag in ms
+
+  function updateConnectionStatus(status) {
+    const el = $('connection-status');
+    if (!el) return;
+    el.className = 'connection-status ' + status;
+    const small = el.querySelector('small');
+    if (small) {
+      small.textContent = status === 'connected' ? '已连接' : status === 'connecting' ? '连接中...' : '未连接';
+    }
+    const dot = el.querySelector('.status-dot');
+    if (dot) {
+      dot.className = 'status-dot ' + (status === 'connected' ? '' : status);
+    }
+
+    // Update lag indicator
+    const lagEl = $('lag-indicator');
+    if (lagEl && status === 'connected' && game.mode === 'online') {
+      lagEl.hidden = false;
+      lagEl.textContent = networkLag + 'ms';
+      lagEl.className = 'lag-indicator' + (networkLag > 200 ? ' very-slow' : networkLag > 100 ? ' slow' : '');
+    } else if (lagEl) {
+      lagEl.hidden = true;
+    }
+  }
 
   function showOnlineScreen() {
     hideAllScreens();
@@ -1472,7 +1573,9 @@
     $('online-waiting').hidden = true;
     $('online-character-select').hidden = true;
     $('back-to-menu-btn').hidden = true;
+    $('online-game-hud').hidden = true;
     onlineState = 'menu';
+    updateConnectionStatus('disconnected');
   }
 
   function hideAllScreens() {
@@ -1486,45 +1589,61 @@
     $('online-waiting').hidden = false;
     $('back-to-menu-btn').hidden = false;
     onlineState = 'waiting';
+    updateConnectionStatus('connecting');
 
-    const result = await network.createRoom();
-    if (result.error) {
-      alert(result.error);
-      showOnlineScreen();
-      return;
-    }
+    // Show loading state
+    $('room-code').textContent = '创建中...';
+    document.querySelector('.waiting-text').textContent = '正在创建房间...';
 
-    onlineRoomCode = result.roomId;
-    onlinePlayerNumber = result.playerNumber;
-    $('room-code').textContent = onlineRoomCode;
-
-    network.onPlayerJoin = () => {
-      // Opponent joined, move to character select
-      onlineState = 'character-select';
-      $('online-waiting').hidden = true;
-      $('online-character-select').hidden = false;
-      showOnlineCharacterSelect();
-    };
-
-    network.onPlayerLeave = () => {
-      alert('对手已断开连接');
-      leaveOnlineRoom();
-    };
-
-    network.onData = (data) => {
-      if (data.type === 'characterSelect') {
-        onlineOpponentCharacter = data.character;
-        $('online-p2-char').textContent = CHARACTERS[data.character].name;
-        $('online-p2-status').classList.add('ready');
-
-        // If I already selected, start game
-        if (game.manualPicks[onlinePlayerNumber]) {
-          startOnlineGame();
-        }
-      } else if (data.type === 'input') {
-        onlineOpponentInput = data.input;
+    try {
+      const result = await network.createRoom();
+      if (result.error) {
+        alert(result.error);
+        showOnlineScreen();
+        return;
       }
-    };
+
+      onlineRoomCode = result.roomId;
+      onlinePlayerNumber = result.playerNumber;
+      $('room-code').textContent = onlineRoomCode;
+      document.querySelector('.waiting-text').textContent = '等待对手加入...';
+      updateConnectionStatus('connected');
+
+      // Start connection health check
+      startConnectionCheck();
+
+      network.onPlayerJoin = () => {
+        // Opponent joined, move to character select
+        onlineState = 'character-select';
+        $('online-waiting').hidden = true;
+        $('online-character-select').hidden = false;
+        showOnlineCharacterSelect();
+        stopConnectionCheck();
+      };
+
+      network.onPlayerLeave = () => {
+        alert('对手已断开连接');
+        leaveOnlineRoom();
+      };
+
+      network.onData = (data) => {
+        if (data.type === 'characterSelect') {
+          onlineOpponentCharacter = data.character;
+          $('online-p2-char').textContent = CHARACTERS[data.character].name;
+          $('online-p2-status').classList.add('ready');
+
+          // If I already selected, start game
+          if (game.manualPicks[onlinePlayerNumber]) {
+            startOnlineGame();
+          }
+        } else if (data.type === 'input') {
+          onlineOpponentInput = data.input;
+        }
+      };
+    } catch (error) {
+      alert('创建房间失败：' + error.message);
+      showOnlineScreen();
+    }
   }
 
   async function joinRoom() {
@@ -1540,38 +1659,70 @@
     $('online-waiting').hidden = false;
     $('back-to-menu-btn').hidden = false;
     onlineState = 'waiting';
+    updateConnectionStatus('connecting');
 
-    const result = await network.joinRoom(code);
-    if (result.error) {
-      alert(result.error);
-      showOnlineScreen();
-      return;
-    }
+    // Show loading state
+    $('room-code').textContent = '连接中...';
+    document.querySelector('.waiting-text').textContent = '正在加入房间...';
 
-    onlineRoomCode = result.roomId;
-    onlinePlayerNumber = result.playerNumber;
-
-    // Show waiting screen with note
-    $('room-code').textContent = '已连接';
-    document.querySelector('.waiting-text').textContent = '等待房主开始...';
-
-    network.onPlayerLeave = () => {
-      alert('与房主断开连接');
-      leaveOnlineRoom();
-    };
-
-    network.onData = (data) => {
-      if (data.type === 'characterSelect') {
-        onlineOpponentCharacter = data.character;
-        $('online-p2-char').textContent = CHARACTERS[data.character].name;
-        $('online-p2-status').classList.add('ready');
-      } else if (data.type === 'gameState') {
-        // Client receives game state from host
-        applyRemoteGameState(data.state);
-      } else if (data.type === 'gameStart') {
-        startOnlineGameAsClient();
+    try {
+      const result = await network.joinRoom(code);
+      if (result.error) {
+        alert(result.error);
+        showOnlineScreen();
+        return;
       }
-    };
+
+      onlineRoomCode = result.roomId;
+      onlinePlayerNumber = result.playerNumber;
+
+      // Show waiting screen with note
+      $('room-code').textContent = '已加入';
+      document.querySelector('.waiting-text').textContent = '等待房主开始...';
+      updateConnectionStatus('connected');
+
+      // Start connection health check
+      startConnectionCheck();
+
+      network.onPlayerLeave = () => {
+        alert('与房主断开连接');
+        leaveOnlineRoom();
+      };
+
+      network.onData = (data) => {
+        if (data.type === 'characterSelect') {
+          onlineOpponentCharacter = data.character;
+          $('online-p2-char').textContent = CHARACTERS[data.character].name;
+          $('online-p2-status').classList.add('ready');
+        } else if (data.type === 'gameState') {
+          // Client receives game state from host
+          applyRemoteGameState(data.state);
+        } else if (data.type === 'gameStart') {
+          startOnlineGameAsClient();
+        }
+      };
+    } catch (error) {
+      alert('加入房间失败：' + error.message);
+      showOnlineScreen();
+    }
+  }
+
+  function startConnectionCheck() {
+    stopConnectionCheck();
+    connectionCheckInterval = setInterval(() => {
+      if (network && network.isConnected()) {
+        updateConnectionStatus('connected');
+      } else {
+        updateConnectionStatus('connecting');
+      }
+    }, 2000);
+  }
+
+  function stopConnectionCheck() {
+    if (connectionCheckInterval) {
+      clearInterval(connectionCheckInterval);
+      connectionCheckInterval = null;
+    }
   }
 
   function showOnlineCharacterSelect() {
@@ -1676,6 +1827,11 @@
   function applyRemoteGameState(state) {
     if (!state) return;
 
+    // Calculate network lag
+    if (state.timestamp) {
+      networkLag = Date.now() - state.timestamp;
+    }
+
     // Apply remote game state for client
     game.phase = state.phase;
     game.scores = state.scores;
@@ -1690,19 +1846,62 @@
       game.seat = state.seat;
     }
 
-    // Update player positions from host
+    // Update player positions from host with interpolation
     if (state.players && state.players.length >= 2) {
       const remotePlayerIdx = 1 - onlinePlayerNumber;
       const remotePlayer = state.players[remotePlayerIdx];
       if (remotePlayer && players[remotePlayerIdx]) {
-        players[remotePlayerIdx].x = remotePlayer.x;
-        players[remotePlayerIdx].y = remotePlayer.y;
-        players[remotePlayerIdx].vx = remotePlayer.vx;
-        players[remotePlayerIdx].vy = remotePlayer.vy;
+        // Store current position as previous
+        remoteInterpolation.prevX = players[remotePlayerIdx].x;
+        remoteInterpolation.prevY = players[remotePlayerIdx].y;
+        remoteInterpolation.prevVX = players[remotePlayerIdx].vx;
+        remoteInterpolation.prevVY = players[remotePlayerIdx].vy;
+
+        // Set new target position
+        remoteInterpolation.targetX = remotePlayer.x;
+        remoteInterpolation.targetY = remotePlayer.y;
+        remoteInterpolation.targetVX = remotePlayer.vx;
+        remoteInterpolation.targetVY = remotePlayer.vy;
+
+        // Reset interpolation timer
+        remoteInterpolation.interpTime = 0;
+        remoteInterpolation.lastUpdateTime = performance.now();
       }
     }
 
     updateHud();
+  }
+
+  function updateRemoteInterpolation(dt) {
+    if (onlinePlayerNumber === null || onlinePlayerNumber === 0) return; // Only client needs interpolation
+
+    const remotePlayerIdx = 1 - onlinePlayerNumber;
+    const remotePlayer = players[remotePlayerIdx];
+    if (!remotePlayer) return;
+
+    // Update interpolation time
+    remoteInterpolation.interpTime += dt;
+    const t = Math.min(1, remoteInterpolation.interpTime / remoteInterpolation.interpDuration);
+
+    // Smooth easing function
+    const eased = t * t * (3 - 2 * t);
+
+    // Interpolate position
+    remotePlayer.x = remoteInterpolation.prevX + (remoteInterpolation.targetX - remoteInterpolation.prevX) * eased;
+    remotePlayer.y = remoteInterpolation.prevY + (remoteInterpolation.targetY - remoteInterpolation.prevY) * eased;
+
+    // Interpolate velocity (for smoother animation)
+    remotePlayer.vx = remoteInterpolation.prevVX + (remoteInterpolation.targetVX - remoteInterpolation.prevVX) * eased;
+    remotePlayer.vy = remoteInterpolation.prevVY + (remoteInterpolation.targetVY - remoteInterpolation.prevVY) * eased;
+
+    // Update lag indicator periodically
+    if (game.phase === 'playing') {
+      const lagEl = $('lag-indicator');
+      if (lagEl) {
+        lagEl.textContent = networkLag + 'ms';
+        lagEl.className = 'lag-indicator' + (networkLag > 200 ? ' very-slow' : networkLag > 100 ? ' slow' : '');
+      }
+    }
   }
 
   function endOnlineGame() {
@@ -1714,6 +1913,7 @@
   }
 
   async function leaveOnlineRoom() {
+    stopConnectionCheck();
     if (network) {
       await network.leaveRoom();
       network = null;
@@ -1728,6 +1928,15 @@
     showOnlineScreen();
   }
 
+  // Difficulty selector event listeners
+  document.querySelectorAll('.difficulty-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      game.difficulty = btn.dataset.difficulty;
+      document.querySelectorAll('.difficulty-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+    });
+  });
+
   // Online button event listeners
   $('create-room-btn').addEventListener('click', createRoom);
   $('join-room-btn').addEventListener('click', joinRoom);
@@ -1735,7 +1944,23 @@
     if (e.key === 'Enter') joinRoom();
   });
   $('copy-code-btn').addEventListener('click', () => {
+    if (!onlineRoomCode) return;
     navigator.clipboard.writeText(onlineRoomCode).then(() => {
+      const btn = $('copy-code-btn');
+      btn.textContent = '✓';
+      btn.classList.add('copied');
+      setTimeout(() => {
+        btn.textContent = '📋';
+        btn.classList.remove('copied');
+      }, 2000);
+    }).catch(() => {
+      // Fallback for older browsers
+      const textArea = document.createElement('textarea');
+      textArea.value = onlineRoomCode;
+      document.body.appendChild(textArea);
+      textArea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textArea);
       const btn = $('copy-code-btn');
       btn.textContent = '✓';
       setTimeout(() => btn.textContent = '📋', 2000);

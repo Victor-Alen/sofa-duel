@@ -51,6 +51,14 @@
               <div id="picker-b-row" class="picker-row" hidden><span>玩家二</span><div id="picker-b" class="character-options"></div></div>
               <div class="skill-notes"><small id="skill-note" class="skill-note">珊珊 · 冲撞：向前冲刺，撞飞对手</small><small id="skill-note-b" class="skill-note" hidden></small></div>
             </div>
+            <div id="difficulty-selector" class="difficulty-selector">
+              <span class="difficulty-label">AI 难度</span>
+              <div class="difficulty-options">
+                <button class="difficulty-btn" data-difficulty="easy">简单</button>
+                <button class="difficulty-btn active" data-difficulty="normal">普通</button>
+                <button class="difficulty-btn" data-difficulty="hard">困难</button>
+              </div>
+            </div>
             <p id="control-tip" class="control-tip">WASD 移动 · 空格放技能</p>
             <button id="start-btn" class="primary-btn">开始抢沙发 <span>→</span></button>
             <small>随机房间规则 · 每局 18 秒 · 三分获胜</small>
@@ -101,6 +109,7 @@
           <div class="connection-status" id="connection-status">
             <span class="status-dot"></span>
             <small>连接中</small>
+            <span class="lag-indicator" id="lag-indicator" hidden>0ms</span>
           </div>
         </div>
         <div id="result-screen" class="screen" aria-live="polite">
