@@ -4,14 +4,14 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#faf3e9">
-  <title>沙发只能坐一个 | 六角色高光版</title>
+  <title>沙发只能坐一个 | 六角色多沙发版</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <main class="shell">
     <header class="topbar">
       <div class="brand"><span class="brand-icon">✳</span><span>沙发只能坐一个<small>SOFA SHOWDOWN · SHOWTIME</small></span></div>
-      <div class="top-right"><span class="pill">角色有情绪 · 回合有高光 · 一个沙发</span><button id="fullscreen-btn" class="top-action">⛶ 大屏</button><button id="demo-btn" class="top-action demo-action">▶ 自动演示</button><button id="pause-btn" class="icon-btn" aria-label="暂停游戏" title="暂停游戏">⏸</button><button id="sound-btn" class="icon-btn" aria-label="切换声音" title="切换声音">♪</button></div>
+      <div class="top-right"><span class="pill">角色有情绪 · 回合有高光 · 沙发不止一张</span><button id="fullscreen-btn" class="top-action">⛶ 大屏</button><button id="demo-btn" class="top-action demo-action">▶ 自动演示</button><button id="help-btn" class="icon-btn help-btn" aria-label="游戏帮助" title="游戏帮助">?</button><button id="pause-btn" class="icon-btn" aria-label="暂停游戏" title="暂停游戏">⏸</button><button id="sound-btn" class="icon-btn" aria-label="切换声音" title="切换声音">♪</button></div>
     </header>
 
     <section class="intro">
@@ -45,11 +45,18 @@
             <span class="card-icon">🛋️</span>
             <p class="card-kicker">SOFA SHOWDOWN</p>
             <h2>今晚沙发归谁？</h2>
-            <p>一个房间，一张沙发。<br>每回合随机房间规则，抢满 1.6 秒得分。</p>
             <div class="pickers">
               <div class="picker-row"><span>玩家一</span><div id="picker-a" class="character-options"></div></div>
               <div id="picker-b-row" class="picker-row" hidden><span>玩家二</span><div id="picker-b" class="character-options"></div></div>
               <div class="skill-notes"><small id="skill-note" class="skill-note">珊珊 · 冲撞：向前冲刺，撞飞对手</small><small id="skill-note-b" class="skill-note" hidden></small></div>
+            </div>
+            <div id="sofa-selector" class="difficulty-selector">
+              <span class="difficulty-label">沙发数量</span>
+              <div class="difficulty-options">
+                <button class="difficulty-btn sofa-btn active" data-sofas="1">1 张</button>
+                <button class="difficulty-btn sofa-btn" data-sofas="2">2 张</button>
+                <button class="difficulty-btn sofa-btn" data-sofas="3">3 张</button>
+              </div>
             </div>
             <div id="difficulty-selector" class="difficulty-selector">
               <span class="difficulty-label">AI 难度</span>
@@ -59,9 +66,7 @@
                 <button class="difficulty-btn" data-difficulty="hard">困难</button>
               </div>
             </div>
-            <p id="control-tip" class="control-tip">WASD 移动 · 空格放技能</p>
             <button id="start-btn" class="primary-btn">开始抢沙发 <span>→</span></button>
-            <small>随机房间规则 · 每局 18 秒 · 三分获胜</small>
           </div>
         </div>
         <div id="online-screen" class="screen" aria-live="polite">
@@ -127,21 +132,24 @@
         <div id="round-banner" class="round-banner" aria-live="polite"></div>
         <div id="play-tip" class="play-tip">靠近沙发，独占 1.6 秒得分</div>
       </div>
-      <p class="fullscreen-hint">P 暂停 · Esc 退出大屏 · 双人键位见游戏首页</p>
+      <p class="fullscreen-hint">P 暂停 · Esc 退出大屏</p>
       <div class="mobile-controls" aria-label="触屏控制">
         <div id="joystick" class="joystick"><span id="joystick-knob"></span></div>
         <button id="dash-touch" class="dash-touch">冲撞<small>↗</small></button>
       </div>
       <div class="record-cta">你选谁来抢？</div>
     </section>
-
-    <section class="below">
-      <div class="instruction"><span class="instruction-icon">↕</span><div><strong>移动</strong><span>玩家一：W A S D <i>·</i> 玩家二：方向键</span></div></div>
-      <div class="instruction"><span class="instruction-icon">✦</span><div><strong>技能</strong><span>玩家一：空格 <i>·</i> 玩家二：回车</span></div></div>
-      <div class="instruction tip"><span class="instruction-icon">!</span><div><strong>小秘诀</strong><span>两人同时靠近沙发时无法占领，先用技能逼开对手。P 暂停。</span></div></div>
-    </section>
-    <footer>六角色同屏对决 · 手机可单人挑战 · 联网双人在线对战</footer>
   </main>
+  <dialog id="help-dialog" class="help-dialog" aria-label="游戏帮助">
+    <div class="help-card">
+      <div class="help-head">
+        <span class="help-mark">?</span>
+        <div><p class="card-kicker">HOW TO PLAY</p><h2>怎么抢沙发</h2></div>
+        <button id="help-close" class="help-close" type="button" aria-label="关闭帮助">×</button>
+      </div>
+      <div id="help-body" class="help-body"></div>
+    </div>
+  </dialog>
   <dialog id="poster-dialog" class="poster-dialog" aria-label="战绩海报">
     <button id="poster-close" class="poster-close" aria-label="关闭海报">×</button>
     <img id="poster-image" alt="本局战绩海报">

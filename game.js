@@ -19,10 +19,31 @@
   const HIGHLIGHT_FPS = 12;
   const HIGHLIGHT_SECONDS = 2.4;
   const HIGHLIGHT_FRAME_COUNT = Math.round(HIGHLIGHT_FPS * HIGHLIGHT_SECONDS);
-  // All starting spots are centered horizontally so neither side starts closer.
-  const seatSpots = [[480, 312], [480, 255], [480, 365]];
+  // One sofa stays in the visible middle band; extra sofas use mirror-symmetric layouts
+  // so both players start equally far away. Multi-sofa matches switch mobile to the
+  // full 16:9 view (body.multi-sofa) so every sofa is on screen.
+  const SINGLE_SEAT_SPOTS = [[480, 312], [480, 258], [480, 368]];
+  const TWO_SEAT_LAYOUTS = [
+    [[268, 252], [692, 252]],
+    [[268, 312], [692, 312]],
+    [[268, 374], [692, 374]]
+  ];
+  const THREE_SEAT_LAYOUTS = [
+    [[480, 250], [288, 374], [672, 374]],
+    [[480, 374], [288, 250], [672, 250]],
+    [[480, 312], [268, 252], [692, 252]]
+  ];
+  const MULTI_SEAT_SPOTS = [[480, 312], [480, 250], [480, 374], [268, 252], [692, 252], [268, 312], [692, 312], [268, 374], [692, 374]];
+  const SEAT_MIN_GAP = 200;
+  const CAPTURE_RADIUS = 89;
   const narrowScreen = () => window.matchMedia('(max-width: 760px)').matches;
   const isDesktop = () => !narrowScreen() && !('ontouchstart' in window) && window.innerWidth > 760;
+  const playArea = () => {
+    if (!narrowScreen()) return [41, W - 41];
+    // Single sofa keeps the tight 4:5 crop; several sofas widen to a 4:3 crop so
+    // the outer seats stay visible, and players stay inside that band.
+    return document.body.classList.contains('multi-sofa') ? [150, W - 150] : [300, 660];
+  };
 
   // Apply desktop fullscreen mode automatically
   if (isDesktop()) {
@@ -44,7 +65,7 @@
     frame.width = 480; frame.height = 270;
     return frame;
   });
-  const game = { mode: 'cpu', difficulty: 'normal', lastCpuPick: null, phase: 'menu', manualPicks: ['dash', 'guard'], picks: ['dash', 'guard'], scores: [0, 0], capture: [0, 0], time: ROUND_SECONDS, seat: { x: 480, y: 312 }, previousSeatY: null, rule: null, previousRule: null, ruleHistory: [], ruleTarget: null, ruleMove: null, rulePhase: 'idle', elapsed: 0, round: 0, tiedRounds: 0, wait: 0, bannerTime: 0, playTipTime: 0, bannerText: '', particles: [], shake: 0, hitStop: 0, paused: false, audio: true, audioContext: null, replay: null, highlightFrames: [], highlightClock: 0, lastImpact: null, combo: [0, 0], maxCombo: [0, 0], stats: loadStats(), music: null, musicGain: null, achievementQueue: [], currentAchievement: null };
+  const game = { mode: 'cpu', difficulty: 'normal', lastCpuPick: null, phase: 'menu', manualPicks: ['dash', 'guard'], picks: ['dash', 'guard'], scores: [0, 0], capture: [0, 0], time: ROUND_SECONDS, seats: [], sofaCount: 1, matchSofas: 1, lastSeatLayout: '', rule: null, previousRule: null, ruleHistory: [], ruleTarget: null, ruleMove: null, rulePhase: 'idle', elapsed: 0, round: 0, tiedRounds: 0, wait: 0, bannerTime: 0, playTipTime: 0, bannerText: '', particles: [], shake: 0, hitStop: 0, paused: false, audio: true, audioContext: null, replay: null, highlightFrames: [], highlightClock: 0, lastImpact: null, standoff: false, combo: [0, 0], maxCombo: [0, 0], stats: loadStats(), music: null, musicGain: null, achievementQueue: [], currentAchievement: null };
   let last = performance.now();
 
   function makePlayer(i) {
@@ -197,9 +218,12 @@
   }
 
   function resetPlayers() {
+    const multi = game.seats.length > 1;
+    const spawn = multi ? [150, 810] : narrowScreen() ? [340, 620] : [230, 730];
+    const spawnY = multi ? 470 : 355;
     for (let i = 0; i < 2; i++) {
       const p = players[i];
-      Object.assign(p, { characterId: game.picks[i], x: narrowScreen() ? (i ? 620 : 340) : (i ? 730 : 230), y: 355, vx: 0, vy: 0, facingX: i ? -1 : 1, facingY: 0, dashLeft: 0, dashHit: false, shieldLeft: 0, shieldHit: false, pulseLeft: 0, pullLeft: 0, warpLeft: 0, reboundLeft: 0, reboundX: 0, reboundY: 0, reboundPower: 0, trap: null, skillCooldown: 0, stunned: 0, blink: 0, walk: 0, aiDecision: i ? .5 + Math.random() * .6 : 0, wantsSkill: false, anim: i * 1.7, emotion: 'neutral', emotionLeft: 0, castLeft: 0, castTotal: .4, impactLeft: 0, celebrateLeft: 0 });
+      Object.assign(p, { characterId: game.picks[i], x: spawn[i], y: spawnY, vx: 0, vy: 0, facingX: i ? -1 : 1, facingY: 0, dashLeft: 0, dashHit: false, shieldLeft: 0, shieldHit: false, pulseLeft: 0, pullLeft: 0, warpLeft: 0, reboundLeft: 0, reboundX: 0, reboundY: 0, reboundPower: 0, trap: null, skillCooldown: 0, stunned: 0, blink: 0, walk: 0, aiDecision: i ? .5 + Math.random() * .6 : 0, wantsSkill: false, anim: i * 1.7, emotion: 'neutral', emotionLeft: 0, castLeft: 0, castTotal: .4, impactLeft: 0, celebrateLeft: 0 });
     }
   }
 
@@ -258,6 +282,45 @@
     $('replay-ui').hidden = false;
   }
 
+  function seatLayout(count) {
+    if (count <= 1) return [SINGLE_SEAT_SPOTS[Math.floor(Math.random() * SINGLE_SEAT_SPOTS.length)]];
+    const layouts = count === 2 ? TWO_SEAT_LAYOUTS : THREE_SEAT_LAYOUTS;
+    return layouts[Math.floor(Math.random() * layouts.length)].map(spot => [...spot]);
+  }
+
+  function seatSignature(spots) {
+    return spots.map(spot => `${spot[0]}:${spot[1]}`).sort().join('|');
+  }
+
+  function nearestSeat(point) {
+    let best = null, bestDistance = Infinity;
+    for (const seat of game.seats) {
+      const distance = dist(point, seat);
+      if (distance < bestDistance) { best = seat; bestDistance = distance; }
+    }
+    return best;
+  }
+
+  function seatTargetAwayFrom(index) {
+    const pool = game.seats.length > 1 ? MULTI_SEAT_SPOTS : SINGLE_SEAT_SPOTS;
+    const seat = game.seats[index];
+    const free = pool.filter(([x, y]) => {
+      if (Math.hypot(seat.x - x, seat.y - y) < 40) return false;
+      return game.seats.every((other, i) => i === index || Math.hypot(other.x - x, other.y - y) >= SEAT_MIN_GAP);
+    });
+    if (free.length) return free[Math.floor(Math.random() * free.length)];
+    let best = [seat.x, seat.y], bestGap = -1;
+    for (const spot of pool) {
+      let gap = Infinity;
+      for (let i = 0; i < game.seats.length; i++) {
+        if (i === index) continue;
+        gap = Math.min(gap, Math.hypot(game.seats[i].x - spot[0], game.seats[i].y - spot[1]));
+      }
+      if (gap > bestGap) { bestGap = gap; best = spot; }
+    }
+    return best;
+  }
+
   function newRound() {
     game.round++;
     clearHighlight();
@@ -265,13 +328,16 @@
     game.playTipTime = game.round === 1 && game.mode !== 'demo' ? 4 : 0;
     $('play-tip').classList.toggle('show', game.playTipTime > 0);
     game.capture = [0, 0];
+    game.standoff = false;
+    game.standoffTime = 0;
+    game.standoffShown = false;
     game.time = ROUND_SECONDS;
     game.phase = 'countdown';
     game.wait = document.body.classList.contains('record-mode') ? .55 : 1.8;
-    const spots = seatSpots.filter(spot => spot[1] !== game.previousSeatY);
-    const spot = spots[Math.floor(Math.random() * spots.length)];
-    game.seat = { x: spot[0], y: spot[1] };
-    game.previousSeatY = spot[1];
+    let spots = seatLayout(game.matchSofas);
+    for (let attempt = 0; attempt < 4 && game.matchSofas > 1 && seatSignature(spots) === game.lastSeatLayout; attempt++) spots = seatLayout(game.matchSofas);
+    game.lastSeatLayout = seatSignature(spots);
+    game.seats = spots.map(([x, y]) => ({ x, y, capture: [0, 0] }));
     const choices = RULE_IDS.filter(id => id !== game.previousRule);
     const ruleId = forcedRule || choices[Math.floor(Math.random() * choices.length)];
     game.rule = RULES[ruleId];
@@ -280,9 +346,13 @@
     game.rulePhase = ruleId === 'frenzy' ? 'active' : 'idle';
     game.ruleMove = null;
     game.elapsed = 0;
-    const destinations = seatSpots.filter(candidate => candidate[1] !== spot[1]);
-    const destination = destinations[Math.floor(Math.random() * destinations.length)];
-    game.ruleTarget = { x: destination[0], y: destination[1] };
+    if (ruleId === 'shuffle') {
+      const index = Math.floor(Math.random() * game.seats.length);
+      const destination = seatTargetAwayFrom(index);
+      game.ruleTarget = { index, x: destination[0], y: destination[1] };
+    } else {
+      game.ruleTarget = null;
+    }
     $('record-hook').textContent = {
       shuffle: '室友抢沙发，沙发先跑了！',
       spring: '抢沙发，沙发把人弹飞了！',
@@ -323,6 +393,9 @@
       game.picks = [...game.manualPicks];
     }
     syncMode();
+    // Demo matches rotate the sofa count so the showcase shows off every layout.
+    game.matchSofas = game.mode === 'demo' ? 1 + Math.floor(Math.random() * 3) : game.sofaCount;
+    document.body.classList.toggle('multi-sofa', game.matchSofas > 1);
     game.scores = [0, 0];
     game.combo = [0, 0];
     game.maxCombo = [0, 0];
@@ -330,7 +403,8 @@
     game.tiedRounds = 0;
     game.ruleHistory = [];
     game.previousRule = null;
-    game.previousSeatY = null;
+    game.lastSeatLayout = '';
+    game.seats = [];
     game.particles = [];
     game.hitStop = 0;
     game.paused = false;
@@ -344,8 +418,11 @@
     startBackgroundMusic();
   }
 
-  function scorePoint(winner, reason) {
+  function scorePoint(winner, reason, seat) {
     if (game.phase !== 'playing') return;
+    game.standoff = false;
+    game.standoffTime = 0;
+    const spot = seat || nearestSeat(players[winner]) || { x: 480, y: 312 };
     game.playTipTime = 0;
     $('play-tip').classList.remove('show');
     game.scores[winner]++;
@@ -354,7 +431,7 @@
     game.maxCombo[winner] = Math.max(game.maxCombo[winner], game.combo[winner]);
     if (game.combo[winner] >= 2) {
       showBanner(`${CHARACTERS[game.picks[winner]].name} ${game.combo[winner]} 连击！`, 1.2);
-      burst(game.seat.x, game.seat.y - 35, winner, 15 + game.combo[winner] * 5);
+      burst(spot.x, spot.y - 35, winner, 15 + game.combo[winner] * 5);
       tone(600 + game.combo[winner] * 80, .15, 'triangle', .05);
     }
     game.tiedRounds = 0;
@@ -362,7 +439,7 @@
     startHighlight(winner, reason);
     game.wait = game.replay ? 3.3 : 2.15;
     game.shake = .18;
-    burst(game.seat.x, game.seat.y - 35, winner, 30);
+    burst(spot.x, spot.y - 35, winner, 30);
     react(players[winner], 'happy', 2.8, true);
     react(players[1 - winner], 'sad', 2.2);
     const name = CHARACTERS[game.picks[winner]].name;
@@ -407,10 +484,6 @@
   function syncMode() {
     document.querySelectorAll('.mode').forEach(btn => btn.classList.toggle('active', btn.dataset.mode === game.mode));
     const waitingForOpponent = game.mode === 'cpu' && !document.body.classList.contains('in-match');
-    $('control-tip').textContent = game.mode === 'demo' ? '电脑自动对战，点击开始观看' :
-      game.mode === 'duo' ? '玩家一 WASD / 空格 · 玩家二 方向键 / 回车' :
-      game.mode === 'online' ? '联网对战 · 创建或加入房间' :
-      narrowScreen() ? '左侧摇杆移动 · 右侧按钮放技能' : 'WASD 移动 · 空格放技能';
     $('start-btn').firstChild.textContent = game.mode === 'demo' ? '开始观看演示 ' : game.mode === 'online' ? '进入联网模式 ' : '开始抢沙发 ';
     $('player-a-label').textContent = `${game.mode === 'demo' ? '电脑' : '玩家一'}·${CHARACTERS[game.picks[0]].name}`;
     $('player-b-label').textContent = waitingForOpponent ? '随机对手' : `${game.mode === 'demo' || game.mode === 'cpu' ? '电脑' : '玩家二'}·${CHARACTERS[game.picks[1]].name}`;
@@ -481,6 +554,9 @@
     game.ruleHistory = [];
     game.ruleTarget = null;
     game.ruleMove = null;
+    game.seats = [];
+    game.lastSeatLayout = '';
+    document.body.classList.remove('multi-sofa');
     game.wait = 0;
     game.bannerTime = 0;
     game.playTipTime = 0;
@@ -586,6 +662,32 @@
     $('status-label').textContent = game.paused ? '已暂停' : game.replay ? '高光回放' : game.phase === 'playing' ? '抢沙发中' : game.phase === 'countdown' ? '准备开战' : game.phase === 'roundEnd' ? '本回合结束' : game.mode === 'demo' ? '自动演示' : '先到 3 分获胜';
   }
 
+  // All instructions live in one help dialog so the start screen and mobile layout stay clean.
+  function renderHelp() {
+    const ruleItems = RULE_IDS.map(id => {
+      const rule = RULES[id];
+      return `<div class="help-item"><span class="help-icon">${rule.icon}</span><div><strong>${rule.name}</strong><p>${rule.description}</p></div></div>`;
+    }).join('');
+    const characterItems = CHARACTER_IDS.map(id => {
+      const character = CHARACTERS[id];
+      return `<div class="help-item"><span class="help-dot" style="background:${character.color}"></span><div><strong>${character.name} · ${character.skill.name}</strong><p>${character.skill.description} · 冷却 ${character.skill.cooldown} 秒</p></div></div>`;
+    }).join('');
+    const controls = narrowScreen()
+      ? '<p>左侧摇杆移动，右侧圆形按钮放技能，按钮文字就是你的技能。</p>'
+      : '<p>玩家一：W A S D 移动，空格放技能。玩家二：方向键移动，回车放技能。</p>';
+    const pauseTip = narrowScreen()
+      ? '<p>右上角 ⏸ 暂停，? 随时打开本帮助。</p>'
+      : '<p>P 暂停，Esc 退出大屏；右上角 ? 随时打开本帮助。</p>';
+    $('help-body').innerHTML = `
+      <section><h3>目标</h3>
+        <p>独占一张沙发 <b>1.6 秒</b>得 1 分，先拿 <b>3 分</b>获胜。每回合 18 秒，时间到按占领进度判定。</p>
+        <p>两人挤在同一张沙发上时都无法占领。多张沙发时，如果对手已经坐上另一张，你的进度会冻结 —— 先去把他逼起身。</p>
+      </section>
+      <section><h3>操作</h3>${controls}${pauseTip}<p>开局前可选 1–3 张沙发。沙发越多，越要判断先抢哪一张、什么时候换位。</p></section>
+      <section><h3>房间规则 · 每回合随机</h3>${ruleItems}</section>
+      <section><h3>角色技能 · 每人只能用自己的技能</h3>${characterItems}</section>`;
+  }
+
   function pushAway(attacker, victim, power, stun) {
     const distance = dist(attacker, victim);
     const dx = distance > 1 ? (victim.x - attacker.x) / distance : attacker.facingX;
@@ -655,7 +757,7 @@
       const other = players[1 - p.i];
       const otherDistance = dist(p, other);
       const travel = otherDistance < skill.distance + 30 ? Math.max(0, otherDistance - 28) : skill.distance;
-      const edge = narrowScreen() ? [300, 660] : [41, W - 41];
+      const edge = playArea();
       p.x = Math.max(edge[0], Math.min(edge[1], p.x + p.facingX * travel));
       p.y = Math.max(142, Math.min(H - 39, p.y + p.facingY * travel));
       p.vx = 0;
@@ -712,15 +814,26 @@
 
   const ruleHandlers = {
     shuffle(rule) {
-      game.ruleMove = { fromY: game.seat.y, toY: game.ruleTarget.y, elapsed: 0, duration: rule.moveDuration };
-      burst(game.seat.x, game.seat.y, 0, 15);
+      const index = game.ruleTarget && game.seats[game.ruleTarget.index] ? game.ruleTarget.index : Math.floor(Math.random() * game.seats.length);
+      const seat = game.seats[index];
+      if (!seat) return;
+      let target = game.ruleTarget && game.ruleTarget.index === index ? game.ruleTarget : null;
+      if (!target) {
+        const spot = seatTargetAwayFrom(index);
+        target = { index, x: spot[0], y: spot[1] };
+      }
+      game.ruleTarget = target;
+      game.ruleMove = { index, fromX: seat.x, fromY: seat.y, toX: target.x, toY: target.y, elapsed: 0, duration: rule.moveDuration };
+      burst(seat.x, seat.y, 0, 15);
       game.shake = .08;
       showBanner('沙发搬家！', .65);
       tone(510, .17, 'triangle', .06);
     },
     spring(rule) {
       for (const p of players) {
-        const distance = dist(p, game.seat);
+        const seat = nearestSeat(p);
+        if (!seat) continue;
+        const distance = dist(p, seat);
         if (distance > rule.radius) continue;
         if (p.shieldLeft > 0 && !p.shieldHit) {
           p.shieldLeft = 0;
@@ -728,8 +841,8 @@
           react(p, 'smug', .75);
           characterSound(p, 'block');
         } else {
-          const dx = distance > 1 ? (p.x - game.seat.x) / distance : (p.i ? 1 : -1);
-          const dy = distance > 1 ? (p.y - game.seat.y) / distance : 0;
+          const dx = distance > 1 ? (p.x - seat.x) / distance : (p.i ? 1 : -1);
+          const dy = distance > 1 ? (p.y - seat.y) / distance : 0;
           p.dashLeft = 0;
           p.stunned = Math.max(p.stunned, rule.stun);
           p.blink = .38;
@@ -748,19 +861,24 @@
   };
 
   function updateRoomRule(dt) {
+    if (onlinePlayerNumber === 1) return; // The host owns sofa movement in online matches.
     if (!game.rule || game.rule.id === 'frenzy' || game.rulePhase === 'triggered') return;
     game.elapsed += dt;
     if (game.rulePhase === 'moving') {
       const move = game.ruleMove;
+      const seat = move && game.seats[move.index];
+      if (!move || !seat) { game.rulePhase = 'triggered'; updateRuleHud(); return; }
       move.elapsed = Math.min(move.duration, move.elapsed + dt);
       const t = move.elapsed / move.duration;
       const eased = t * t * (3 - 2 * t);
-      game.seat.y = move.fromY + (move.toY - move.fromY) * eased;
+      seat.x = move.fromX + (move.toX - move.fromX) * eased;
+      seat.y = move.fromY + (move.toY - move.fromY) * eased;
       if (t >= 1) {
-        game.seat.y = move.toY;
+        seat.x = move.toX;
+        seat.y = move.toY;
         game.ruleMove = null;
         game.rulePhase = 'triggered';
-        burst(game.seat.x, game.seat.y, 1, 15);
+        burst(seat.x, seat.y, 1, 15);
         game.shake = .12;
         updateRuleHud();
       }
@@ -783,11 +901,27 @@
     if (game.mode === 'demo' || (p.i === 1 && game.mode === 'cpu')) {
       const other = players[1 - p.i];
       const skill = CHARACTERS[p.characterId].skill;
-      const seatDistance = dist(p, game.seat);
-      const nearSeat = seatDistance < 86;
       const enemyDistance = dist(p, other);
       const nearOther = enemyDistance < 145;
-      const contested = dist(other, game.seat) < 89;
+      const mySeat = nearestSeat(p);
+      let targetSeat = mySeat;
+      // If the opponent is already lounging on another sofa, nobody can score until
+      // someone breaks the standoff, so contest their sofa instead of camping.
+      const enemySeat = other.stunned <= 0 ? game.seats.find(seat => dist(other, seat) < CAPTURE_RADIUS) : null;
+      if (enemySeat) {
+        targetSeat = enemySeat;
+      } else if (game.seats.length > 1 && mySeat && dist(other, mySeat) + 70 < dist(p, mySeat)) {
+        // With several sofas, contest the one we can reach first instead of always rushing the same spot.
+        let best = mySeat, bestGap = -Infinity;
+        for (const seat of game.seats) {
+          const gap = dist(other, seat) - dist(p, seat);
+          if (gap > bestGap) { bestGap = gap; best = seat; }
+        }
+        targetSeat = best;
+      }
+      const seatDistance = targetSeat ? dist(p, targetSeat) : 999;
+      const nearSeat = Boolean(targetSeat) && seatDistance < 86;
+      const contested = Boolean(targetSeat) && dist(other, targetSeat) < CAPTURE_RADIUS;
       const hostileTrap = other.trap;
 
       // Difficulty-based parameters
@@ -820,7 +954,7 @@
         }
       }
 
-      const target = nearSeat && (nearOther || contested) ? other : game.seat;
+      const target = nearSeat && (nearOther || contested) ? other : (targetSeat || other);
       let dx = target.x - p.x, dy = target.y - p.y;
       const length = Math.hypot(dx, dy);
       if (nearSeat && !nearOther && !contested) return { x: 0, y: 0 };
@@ -844,8 +978,8 @@
         if (skill.kind === 'dash') {
           // Only dash when it pays off: the enemy is contesting the sofa or closer to it than we are,
           // is roughly in front, and we roll below the attempt chance.
-          const enemyOnSeat = dist(other, game.seat) < 89;
-          const enemyCloser = dist(other, game.seat) < seatDistance;
+          const enemyOnSeat = game.seats.some(seat => dist(other, seat) < CAPTURE_RADIUS);
+          const enemyCloser = Boolean(targetSeat) && dist(other, targetSeat) < seatDistance;
           const inFront = (dx * p.facingX + dy * p.facingY) > 0.3;
           useNow = enemyDistance > 45 && enemyDistance < 145 && inFront && (enemyOnSeat || enemyCloser) && Math.random() < attemptChance;
         } else if (skill.kind === 'shield') {
@@ -932,7 +1066,7 @@
         p.walk += dt * 11;
       }
     }
-    const edge = narrowScreen() ? [300, 660] : [41, W - 41];
+    const edge = playArea();
     p.x = Math.max(edge[0], Math.min(edge[1], p.x + p.vx * dt));
     p.y = Math.max(142, Math.min(H - 39, p.y + p.vy * dt));
   }
@@ -1060,21 +1194,39 @@
     for (let i = 0; i < players.length; i++) updatePlayer(players[i], dt, moves[i]);
     collide();
     updateTraps();
-    const inside = players.map(p => dist(p, game.seat) < 89 && p.stunned <= 0);
-    if (inside[0] !== inside[1]) {
-      const i = inside[0] ? 0 : 1;
-      game.capture[i] += dt;
-      game.capture[1 - i] = Math.max(0, game.capture[1 - i] - dt * .35);
-      if (game.capture[i] >= CAPTURE_SECONDS) scorePoint(i, 'capture');
-    } else if (!inside[0]) {
-      game.capture[0] = Math.max(0, game.capture[0] - dt * .13);
-      game.capture[1] = Math.max(0, game.capture[1] - dt * .13);
+    // With several sofas, two campers on separate seats would otherwise both fill up
+    // at the same moment and the array order would decide the round. When the opponent
+    // is lounging on a different sofa, progress freezes until someone breaks the standoff.
+    const seated = players.map(p => game.seats.some(seat => dist(p, seat) < CAPTURE_RADIUS && p.stunned <= 0));
+    let standoff = false;
+    for (const seat of game.seats) {
+      const inside = players.map(p => dist(p, seat) < CAPTURE_RADIUS && p.stunned <= 0);
+      if (inside[0] !== inside[1]) {
+        const i = inside[0] ? 0 : 1;
+        if (seated[1 - i]) { standoff = true; continue; }
+        seat.capture[i] += dt;
+        seat.capture[1 - i] = Math.max(0, seat.capture[1 - i] - dt * .35);
+        if (seat.capture[i] >= CAPTURE_SECONDS) { scorePoint(i, 'capture', seat); break; }
+      } else if (!inside[0]) {
+        seat.capture[0] = Math.max(0, seat.capture[0] - dt * .13);
+        seat.capture[1] = Math.max(0, seat.capture[1] - dt * .13);
+      } else if (inside[0] && inside[1]) {
+        standoff = true;
+      }
     }
-    if (game.time <= 0 && game.phase === 'playing') {
-      if (Math.abs(game.capture[0] - game.capture[1]) > .01) {
-        scorePoint(game.capture[0] > game.capture[1] ? 0 : 1, 'timeout');
+    game.standoff = standoff;
+    game.standoffTime = standoff ? game.standoffTime + dt : 0;
+    if (standoff && !game.standoffShown && game.standoffTime > .5 && game.seats.length > 1) {
+      game.standoffShown = true;
+      showBanner('沙发对峙 · 先把对手逼起身', 1.1);
+    }
+    game.capture = game.seats.reduce((best, seat) => [Math.max(best[0], seat.capture[0]), Math.max(best[1], seat.capture[1])], [0, 0]);
+    if (game.time <= 0 && game.phase === 'playing' && game.seats.length) {
+      const totals = game.seats.reduce((sum, seat) => [sum[0] + seat.capture[0], sum[1] + seat.capture[1]], [0, 0]);
+      if (Math.abs(totals[0] - totals[1]) > .01) {
+        scorePoint(totals[0] > totals[1] ? 0 : 1, 'timeout');
       } else {
-        const distances = players.map(p => dist(p, game.seat));
+        const distances = players.map(p => Math.min(...game.seats.map(seat => dist(p, seat))));
         if (Math.abs(distances[0] - distances[1]) > 1) {
           scorePoint(distances[0] < distances[1] ? 0 : 1, 'closest');
         } else {
@@ -1169,9 +1321,14 @@
   }
 
   function drawSofa(now) {
-    const { x, y } = game.seat;
-    const pulse = Math.sin(now / 250) * 2;
-    if (game.rule && game.rule.id === 'shuffle' && ['warning', 'moving'].includes(game.rulePhase)) {
+    const ordered = game.seats.map((seat, index) => ({ seat, index })).sort((a, b) => a.seat.y - b.seat.y);
+    for (const { seat, index } of ordered) drawSeat(seat, index, now);
+  }
+
+  function drawSeat(seat, index, now) {
+    const { x, y } = seat;
+    const pulse = Math.sin(now / 250 + index * .8) * 2;
+    if (game.rule && game.rule.id === 'shuffle' && ['warning', 'moving'].includes(game.rulePhase) && game.ruleTarget && game.ruleTarget.index === index) {
       const target = game.ruleTarget;
       ctx.save();
       ctx.strokeStyle = '#fff9d5'; ctx.lineWidth = 6; ctx.setLineDash([12, 9]);
@@ -1188,14 +1345,14 @@
       ctx.beginPath(); ctx.arc(x, y + 12, 116 + Math.sin(now / 75) * 7, 0, 7); ctx.stroke();
     }
     ctx.fillStyle = '#725e6040'; ctx.beginPath(); ctx.ellipse(x, y + 58, 111, 28, 0, 0, 7); ctx.fill();
-    // Occupation aura and progress arcs.
+    // Occupation aura and progress arcs, one per sofa.
     ctx.save(); ctx.translate(x, y + 12);
     ctx.strokeStyle = '#fff9dfaa'; ctx.lineWidth = 4;
-    ctx.beginPath(); ctx.arc(0, 0, 89 + pulse, 0, 7); ctx.stroke();
+    ctx.beginPath(); ctx.arc(0, 0, CAPTURE_RADIUS + pulse, 0, 7); ctx.stroke();
     for (let i = 0; i < 2; i++) {
-      if (game.capture[i] <= 0) continue;
+      if (seat.capture[i] <= 0) continue;
       ctx.strokeStyle = CHARACTERS[game.picks[i]].color; ctx.lineWidth = 9; ctx.lineCap = 'round';
-      ctx.beginPath(); ctx.arc(0, 0, 96, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * Math.min(1, game.capture[i] / CAPTURE_SECONDS), false); ctx.stroke();
+      ctx.beginPath(); ctx.arc(0, 0, 96, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * Math.min(1, seat.capture[i] / CAPTURE_SECONDS), false); ctx.stroke();
     }
     ctx.restore();
     roundRect(x - 87, y + 26, 174, 39, 15, '#986751');
@@ -1208,7 +1365,9 @@
     roundRect(x + 4, y - 13, 52, 26, 9, '#f7bd8e');
     ctx.strokeStyle = '#c16f59'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(x, y - 22); ctx.lineTo(x, y + 18); ctx.stroke();
     roundRect(x - 75, y + 49, 15, 11, 3, '#935b48'); roundRect(x + 59, y + 49, 15, 11, 3, '#935b48');
-    ctx.fillStyle = '#fff8ed'; ctx.font = '800 12px DM Sans, sans-serif'; ctx.textAlign = 'center'; ctx.fillText('ONLY ONE SEAT', x, y - 54);
+    const frozen = game.standoff && game.seats.length > 1 && seat.capture[0] + seat.capture[1] > .05;
+    ctx.fillStyle = frozen ? '#ffe0a8' : '#fff8ed'; ctx.font = '800 12px DM Sans, sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText(game.seats.length > 1 ? `SEAT ${index + 1}${frozen ? ' · 对峙' : ''}` : 'ONLY ONE SEAT', x, y - 54);
   }
 
   function drawTraps(now) {
@@ -1245,7 +1404,8 @@
     if (p.stunned > 0) return 'dizzy';
     if (p.emotionLeft > 0) return p.emotion;
     if (game.phase === 'playing') {
-      if (game.capture[1 - p.i] > .55 && dist(p, game.seat) >= 89) return 'worried';
+      const onSeat = game.seats.some(seat => dist(p, seat) < CAPTURE_RADIUS);
+      if (game.capture[1 - p.i] > .55 && !onSeat) return 'worried';
       if (game.capture[p.i] > .55) return 'happy';
       if (game.time < 5 && game.scores[p.i] < game.scores[1 - p.i]) return 'worried';
     }
@@ -1511,6 +1671,13 @@
   });
   $('poster-close').addEventListener('click', () => $('poster-dialog').close());
   $('poster-dialog').addEventListener('click', event => { if (event.target === $('poster-dialog')) $('poster-dialog').close(); });
+  $('help-btn').addEventListener('click', () => {
+    if (document.activeElement && typeof document.activeElement.blur === 'function') document.activeElement.blur();
+    renderHelp();
+    $('help-dialog').showModal();
+  });
+  $('help-close').addEventListener('click', () => $('help-dialog').close());
+  $('help-dialog').addEventListener('click', event => { if (event.target === $('help-dialog')) $('help-dialog').close(); });
   $('skip-replay').addEventListener('click', skipReplay);
   canvas.addEventListener('pointerdown', () => { if (game.replay) skipReplay(); });
   $('sound-btn').addEventListener('click', () => {
@@ -1520,7 +1687,7 @@
     tone(620, .09);
   });
   document.addEventListener('keydown', event => {
-    if ($('poster-dialog').open) return;
+    if ($('poster-dialog').open || $('help-dialog').open) return;
     if (game.replay && ['Space', 'Enter', 'Escape'].includes(event.code)) {
       event.preventDefault();
       skipReplay();
@@ -1822,7 +1989,10 @@
             scores: game.scores,
             time: game.time,
             rule: game.rule ? game.rule.id : null,
-            seat: game.seat,
+            rulePhase: game.rulePhase,
+            ruleTarget: game.ruleTarget,
+            sofaCount: game.matchSofas,
+            seats: game.seats.map(seat => ({ x: seat.x, y: seat.y })),
             players: players.map(p => ({
               x: p.x,
               y: p.y,
@@ -1876,9 +2046,19 @@
       const ruleId = typeof state.rule === 'string' ? state.rule : state.rule.id;
       game.rule = RULES[ruleId];
     }
+    if (state.rulePhase) game.rulePhase = state.rulePhase;
+    if (state.ruleTarget) game.ruleTarget = state.ruleTarget;
 
-    if (state.seat) {
-      game.seat = state.seat;
+    if (state.sofaCount && state.sofaCount !== game.matchSofas) {
+      game.matchSofas = state.sofaCount;
+      document.body.classList.toggle('multi-sofa', game.matchSofas > 1);
+    }
+    if (Array.isArray(state.seats)) {
+      if (game.seats.length !== state.seats.length) {
+        game.seats = state.seats.map(seat => ({ x: seat.x, y: seat.y, capture: [0, 0] }));
+      } else {
+        state.seats.forEach((seat, i) => { game.seats[i].x = seat.x; game.seats[i].y = seat.y; });
+      }
     }
 
     // Update player positions from host with interpolation
@@ -1985,12 +2165,18 @@
     showOnlineScreen();
   }
 
-  // Difficulty selector event listeners
-  document.querySelectorAll('.difficulty-btn').forEach(btn => {
+  // Difficulty and sofa-count selectors
+  document.querySelectorAll('.difficulty-btn[data-difficulty]').forEach(btn => {
     btn.addEventListener('click', () => {
       game.difficulty = btn.dataset.difficulty;
-      document.querySelectorAll('.difficulty-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.difficulty-btn[data-difficulty]').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
+    });
+  });
+  document.querySelectorAll('.sofa-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      game.sofaCount = Math.max(1, Math.min(3, Number(btn.dataset.sofas) || 1));
+      document.querySelectorAll('.sofa-btn').forEach(b => b.classList.toggle('active', b === btn));
     });
   });
 
@@ -2117,6 +2303,62 @@
         updatePlayer(players[0], players[0].trap.arm + .01, { x: 0, y: 0 });
         updateTraps();
         results.trapShield = { ok: players[1].stunned === 0 && players[1].shieldHit && !players[0].trap, stun: players[1].stunned };
+        return results;
+      },
+      checkSeats() {
+        const results = {};
+        game.audio = false;
+        const start = count => {
+          game.mode = 'duo';
+          game.sofaCount = count;
+          startMatch();
+          game.rule = null;
+          game.rulePhase = 'idle';
+          game.ruleTarget = null;
+          game.ruleMove = null;
+          game.seats.forEach(seat => { seat.capture = [0, 0]; });
+          game.phase = 'playing';
+          game.time = ROUND_SECONDS;
+        };
+        for (let count = 1; count <= 3; count++) {
+          start(count);
+          const layout = game.seats.map(seat => [Math.round(seat.x), Math.round(seat.y)]);
+          let minGap = Infinity;
+          for (let i = 0; i < game.seats.length; i++) {
+            for (let j = i + 1; j < game.seats.length; j++) minGap = Math.min(minGap, dist(game.seats[i], game.seats[j]));
+          }
+          results[`layout${count}`] = { count: game.seats.length, layout, minGap: Math.round(minGap) };
+        }
+        start(1);
+        let ticks = 0;
+        while (game.phase === 'playing' && ticks < 90) {
+          players[0].x = game.seats[0].x; players[0].y = game.seats[0].y;
+          players[1].x = 80; players[1].y = 470;
+          players.forEach(p => { p.stunned = 0; p.vx = 0; p.vy = 0; p.dashLeft = 0; });
+          update(.033);
+          ticks++;
+        }
+        results.capture = { scores: [...game.scores], ticks, phase: game.phase };
+        start(2);
+        const seatCount = game.seats.length;
+        let ticksSplit = 0;
+        while (game.phase === 'playing' && ticksSplit < 40) {
+          players[0].x = game.seats[0].x; players[0].y = game.seats[0].y;
+          players[1].x = game.seats[1].x; players[1].y = game.seats[1].y;
+          players.forEach(p => { p.stunned = 0; p.vx = 0; p.vy = 0; p.dashLeft = 0; });
+          update(.033);
+          ticksSplit++;
+        }
+        const frozen = game.standoff && game.seats.every(seat => seat.capture[0] === 0 && seat.capture[1] === 0);
+        let ticksBreak = 0;
+        while (game.phase === 'playing' && ticksBreak < 90) {
+          players[0].x = game.seats[0].x; players[0].y = game.seats[0].y;
+          players[1].x = 80; players[1].y = 470;
+          players.forEach(p => { p.stunned = 0; p.vx = 0; p.vy = 0; p.dashLeft = 0; });
+          update(.033);
+          ticksBreak++;
+        }
+        results.standoff = { seatCount, frozen, ticksSplit, ticksBreak, scores: [...game.scores], phase: game.phase };
         return results;
       }
     };
