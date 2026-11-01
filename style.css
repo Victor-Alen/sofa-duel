@@ -9,6 +9,7 @@
 @media(max-width:760px){.play-tip{bottom:8px;padding:6px 9px;font-size:11px}}
 #pause-btn{display:none}
 body.in-match:not(.match-finished):not(.demo-mode) #pause-btn{display:grid;place-items:center}
+body.online-match #pause-btn{display:none!important}
 @media(max-width:760px){.top-right{gap:8px}}
 .result-rule{display:inline-block!important;max-width:100%;padding:6px 10px;margin:0 0 10px!important;border-radius:9px;background:#fff0dc;color:#a96343!important;font-size:11px!important;font-weight:800;line-height:1.4!important}
 .poster-dialog{position:fixed;width:calc(100vw - 24px);max-width:520px;max-height:92vh;max-height:92dvh;border:0;border-radius:21px;padding:20px;background:#fffaf1;box-shadow:0 24px 80px #2d263e66;text-align:center;color:#756c6b}
@@ -251,6 +252,8 @@ body.record-mode .rule-hud{max-width:78%;font-size:12px}
 /* Online Multiplayer Styles */
 .online-card{min-width:min(400px,90%)}
 .online-menu{display:flex;flex-direction:column;gap:12px;margin-top:16px}
+.online-error{min-height:18px;margin:0;color:#c94135;font-size:12px;font-weight:800;line-height:1.5}
+.online-error:empty{display:none}
 .online-divider{display:flex;align-items:center;gap:12px;color:#b1a8a3;font-size:12px;font-weight:700}
 .online-divider:before,.online-divider:after{content:'';flex:1;height:1px;background:#f2c6b8}
 .join-room-form{display:flex;gap:8px}

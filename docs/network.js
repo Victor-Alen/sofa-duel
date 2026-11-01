@@ -1,320 +1,192 @@
 (() => {
   'use strict';
 
-  // PeerJS for WebRTC peer-to-peer connections (free signaling server)
-  // No backend configuration needed!
+  // PeerJS (WebRTC) transport. The host is authoritative for the match;
+  // this class only carries messages between the two browsers.
+  const PEER_SOURCES = [
+    'https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js',
+    'https://cdn.jsdelivr.net/npm/peerjs@1.5.2/dist/peerjs.min.js',
+    'https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.2/peerjs.min.js'
+  ];
+  const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+
+  // Players only ever see/type the 6-character code; the peer id adds the prefix.
+  function normalizeRoomCode(input) {
+    return String(input || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(-6);
+  }
+
+  function loadScript(src) {
+    return new Promise((resolve, reject) => {
+      const script = document.createElement('script');
+      const timer = setTimeout(() => {
+        script.remove();
+        reject(new Error('load timeout'));
+      }, 8000);
+      script.src = src;
+      script.onload = () => { clearTimeout(timer); resolve(); };
+      script.onerror = () => { clearTimeout(timer); script.remove(); reject(new Error('load failed')); };
+      document.head.appendChild(script);
+    });
+  }
 
   class SofaNetwork {
     constructor() {
       this.peer = null;
       this.conn = null;
-      this.roomId = null;
+      this.roomId = null;      // full peer id of the room, e.g. sofa-ABC123
+      this.roomCode = null;    // the 6 characters players share
       this.playerId = null;
-      this.playerNumber = null; // 0 = host, 1 = client
+      this.playerNumber = null; // 0 = host, 1 = guest
       this.connected = false;
-      this.onStateChange = null;
       this.onPlayerJoin = null;
       this.onPlayerLeave = null;
-      this.onGameStart = null;
-      this.onGameEnd = null;
-      this.onChat = null;
       this.onData = null;
-      this.reconnectAttempts = 0;
-      this.maxReconnectAttempts = 3;
     }
 
-    // Generate a short room code (6 characters)
     generateRoomCode() {
-      const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-      let code = 'sofa-';
-      for (let i = 0; i < 6; i++) {
-        code += chars.charAt(Math.floor(Math.random() * chars.length));
-      }
+      let code = '';
+      for (let i = 0; i < 6; i++) code += CODE_ALPHABET.charAt(Math.floor(Math.random() * CODE_ALPHABET.length));
       return code;
     }
 
-    // Generate a unique player ID
     generatePlayerId() {
-      return 'player_' + Math.random().toString(36).substr(2, 9) + Date.now().toString(36);
+      return 'player_' + Math.random().toString(36).slice(2, 11) + Date.now().toString(36);
     }
 
-    // Load PeerJS library dynamically
     async loadPeerJS() {
       if (window.Peer) return;
+      for (const src of PEER_SOURCES) {
+        try {
+          await loadScript(src);
+          if (window.Peer) return;
+        } catch (_) { /* try the next CDN */ }
+      }
+      throw new Error('联机组件加载失败，请检查网络后重试');
+    }
+
+    openPeer(id) {
       return new Promise((resolve, reject) => {
-        const script = document.createElement('script');
-        script.src = 'https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js';
-        script.onload = resolve;
-        script.onerror = reject;
-        document.head.appendChild(script);
+        let settled = false;
+        const peer = new Peer(id, {
+          debug: 1,
+          config: { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }, { urls: 'stun:stun1.l.google.com:19302' }] }
+        });
+        this.peer = peer;
+        const timer = setTimeout(() => {
+          if (settled) return;
+          settled = true;
+          try { peer.destroy(); } catch (_) {}
+          reject(new Error('连接联机服务器超时，请重试'));
+        }, 15000);
+        peer.on('open', () => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          resolve();
+        });
+        peer.on('error', err => {
+          console.error('Peer error:', err);
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          try { peer.destroy(); } catch (_) {}
+          reject(err);
+        });
+        peer.on('connection', conn => this.handleConnection(conn));
       });
     }
 
-    // Create a new room (host)
     async createRoom() {
-      try {
-        await this.loadPeerJS();
-
-        this.roomId = this.generateRoomCode();
-        this.playerId = this.roomId; // Host uses room ID as peer ID
-        this.playerNumber = 0;
-
-        return new Promise((resolve, reject) => {
-          this.peer = new Peer(this.playerId, {
-            debug: 1,
-            config: {
-              iceServers: [
-                { urls: 'stun:stun.l.google.com:19302' },
-                { urls: 'stun:stun1.l.google.com:19302' }
-              ]
-            }
-          });
-
-          this.peer.on('open', (id) => {
-            console.log('Room created with ID:', id);
-            this.connected = true;
-            resolve({ roomId: this.roomId, playerId: this.playerId, playerNumber: 0 });
-          });
-
-          this.peer.on('connection', (conn) => {
-            this.handleConnection(conn);
-          });
-
-          this.peer.on('error', (err) => {
-            console.error('Peer error:', err);
-            if (err.type === 'unavailable-id') {
-              reject({ error: '房间号已存在，请重试' });
-            } else {
-              reject({ error: '创建房间失败：' + err.type });
-            }
-          });
-
-          // Timeout after 30 seconds
-          setTimeout(() => {
-            if (!this.connected) {
-              reject({ error: '创建房间超时' });
-            }
-          }, 30000);
-        });
-      } catch (error) {
-        return { error: '加载网络库失败：' + error.message };
+      await this.loadPeerJS();
+      this.playerNumber = 0;
+      let lastError = null;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const code = this.generateRoomCode();
+        try {
+          await this.openPeer('sofa-' + code);
+          this.roomCode = code;
+          this.roomId = 'sofa-' + code;
+          this.playerId = this.roomId;
+          return { roomId: this.roomId, roomCode: code, playerNumber: 0 };
+        } catch (error) {
+          lastError = error;
+          if (!error || error.type !== 'unavailable-id') break;
+        }
       }
+      throw lastError || new Error('创建房间失败，请重试');
     }
 
-    // Join an existing room (client)
-    async joinRoom(roomCode) {
-      try {
-        await this.loadPeerJS();
-
-        roomCode = roomCode.toUpperCase().trim();
-        this.roomId = roomCode;
-        this.playerId = this.generatePlayerId();
-        this.playerNumber = 1;
-
-        return new Promise((resolve, reject) => {
-          this.peer = new Peer(this.playerId, {
-            debug: 1,
-            config: {
-              iceServers: [
-                { urls: 'stun:stun.l.google.com:19302' },
-                { urls: 'stun:stun1.l.google.com:19302' }
-              ]
-            }
-          });
-
-          this.peer.on('open', () => {
-            console.log('Connecting to room:', roomCode);
-            const conn = this.peer.connect(roomCode, {
-              reliable: true,
-              metadata: { playerNumber: 1 }
-            });
-
-            this.handleConnection(conn);
-
-            // Timeout after 15 seconds
-            setTimeout(() => {
-              if (!this.connected) {
-                reject({ error: '连接超时，请检查房间号' });
-              }
-            }, 15000);
-          });
-
-          this.peer.on('error', (err) => {
-            console.error('Peer error:', err);
-            if (err.type === 'peer-unavailable') {
-              reject({ error: '房间不存在或已关闭' });
-            } else {
-              reject({ error: '连接失败：' + err.type });
-            }
-          });
-
-          // Wait for connection to be established
-          const checkConnection = setInterval(() => {
-            if (this.connected) {
-              clearInterval(checkConnection);
-              resolve({ roomId: roomCode, playerId: this.playerId, playerNumber: 1 });
-            }
-          }, 100);
-
-          setTimeout(() => clearInterval(checkConnection), 15000);
+    async joinRoom(input) {
+      const code = normalizeRoomCode(input);
+      if (code.length !== 6) throw new Error('房间号是 6 位字母或数字');
+      await this.loadPeerJS();
+      this.roomCode = code;
+      this.roomId = 'sofa-' + code;
+      this.playerNumber = 1;
+      this.playerId = this.generatePlayerId();
+      await this.openPeer(this.playerId);
+      await new Promise((resolve, reject) => {
+        let settled = false;
+        const timer = setTimeout(() => {
+          if (settled) return;
+          settled = true;
+          reject(new Error('连接超时，请确认房间号是否正确'));
+        }, 15000);
+        this.peer.on('error', err => {
+          if (settled || !err || err.type !== 'peer-unavailable') return;
+          settled = true;
+          clearTimeout(timer);
+          reject(new Error('房间不存在或已关闭'));
         });
-      } catch (error) {
-        return { error: '加载网络库失败：' + error.message };
-      }
+        const conn = this.peer.connect(this.roomId, { reliable: true, metadata: { playerNumber: 1 } });
+        this.handleConnection(conn, () => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          resolve();
+        });
+      });
+      return { roomId: this.roomId, roomCode: code, playerNumber: 1 };
     }
 
-    // Handle incoming connection
-    handleConnection(conn) {
+    handleConnection(conn, onOpen) {
       this.conn = conn;
-
       conn.on('open', () => {
-        console.log('Connection established!');
         this.connected = true;
-        this.reconnectAttempts = 0;
-
-        if (this.onPlayerJoin) {
-          this.onPlayerJoin(this.playerNumber === 0 ? 1 : 0);
-        }
+        if (onOpen) onOpen();
+        if (this.onPlayerJoin) this.onPlayerJoin(this.playerNumber === 0 ? 1 : 0);
       });
-
-      conn.on('data', (data) => {
-        this.handleData(data);
-      });
-
+      conn.on('data', data => { if (this.onData) this.onData(data); });
       conn.on('close', () => {
-        console.log('Connection closed');
         this.connected = false;
-        if (this.onPlayerLeave) {
-          this.onPlayerLeave();
-        }
+        if (this.onPlayerLeave) this.onPlayerLeave();
       });
-
-      conn.on('error', (err) => {
-        console.error('Connection error:', err);
-      });
+      conn.on('error', err => console.error('Connection error:', err));
     }
 
-    // Handle received data
-    handleData(data) {
-      if (!data || !data.type) return;
-
-      switch (data.type) {
-        case 'gameState':
-          // Add timestamp to state for lag calculation
-          if (data.timestamp && data.state) {
-            data.state.timestamp = data.timestamp;
-          }
-          if (this.onStateChange) this.onStateChange(data.state);
-          break;
-        case 'input':
-          if (this.onData) this.onData(data);
-          break;
-        case 'characterSelect':
-          if (this.onStateChange) this.onStateChange({ type: 'characterSelect', character: data.character, playerNumber: data.playerNumber });
-          break;
-        case 'gameStart':
-          if (this.onGameStart) this.onGameStart();
-          break;
-        case 'gameEnd':
-          if (this.onGameEnd) this.onGameEnd(data.result);
-          break;
-        case 'chat':
-          if (this.onChat) this.onChat(data.message);
-          break;
-      }
+    send(type, payload = {}) {
+      if (!this.isConnected()) return;
+      this.conn.send({ type, ...payload, timestamp: Date.now() });
     }
 
-    // Leave the current room
     async leaveRoom() {
-      if (this.conn) {
-        this.conn.close();
-        this.conn = null;
-      }
-      if (this.peer) {
-        this.peer.destroy();
-        this.peer = null;
-      }
+      const conn = this.conn;
+      const peer = this.peer;
+      this.conn = null;
+      this.peer = null;
       this.connected = false;
       this.roomId = null;
+      this.roomCode = null;
       this.playerId = null;
       this.playerNumber = null;
+      try { if (conn) conn.close(); } catch (_) {}
+      try { if (peer) peer.destroy(); } catch (_) {}
     }
 
-    // Send game state (from host)
-    sendGameState(gameState) {
-      if (!this.conn || !this.connected || this.playerNumber !== 0) return;
-
-      this.conn.send({
-        type: 'gameState',
-        state: gameState,
-        timestamp: Date.now()
-      });
-    }
-
-    // Send input (from client)
-    sendInput(input) {
-      if (!this.conn || !this.connected) return;
-
-      this.conn.send({
-        type: 'input',
-        input: input,
-        timestamp: Date.now()
-      });
-    }
-
-    // Send character selection
-    sendCharacterSelect(characterId) {
-      if (!this.conn || !this.connected) return;
-
-      this.conn.send({
-        type: 'characterSelect',
-        character: characterId,
-        playerNumber: this.playerNumber,
-        timestamp: Date.now()
-      });
-    }
-
-    // Send game start signal
-    sendGameStart() {
-      if (!this.conn || !this.connected) return;
-
-      this.conn.send({
-        type: 'gameStart',
-        timestamp: Date.now()
-      });
-
-      if (this.onGameStart) this.onGameStart();
-    }
-
-    // Send game end signal
-    sendGameEnd(result) {
-      if (!this.conn || !this.connected) return;
-
-      this.conn.send({
-        type: 'gameEnd',
-        result: result,
-        timestamp: Date.now()
-      });
-    }
-
-    // Send chat message
-    sendChat(message) {
-      if (!this.conn || !this.connected) return;
-
-      this.conn.send({
-        type: 'chat',
-        message: message,
-        playerNumber: this.playerNumber,
-        timestamp: Date.now()
-      });
-    }
-
-    // Check connection status
     isConnected() {
-      return this.connected && this.conn && this.conn.open;
+      return Boolean(this.connected && this.conn && this.conn.open);
     }
   }
 
-  // Export to global scope
   window.SofaNetwork = SofaNetwork;
 })();
