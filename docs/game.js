@@ -1804,8 +1804,16 @@
   function onlineErrorText(error, fallback) {
     if (!error) return fallback;
     if (typeof error === 'string') return error;
-    if (error.type === 'unavailable-id') return '房间号被占用，请再试一次';
-    return error.message || fallback;
+    const messages = {
+      'unavailable-id': '房间号被占用，请再试一次',
+      network: '联机服务器连接失败，请检查网络后重试',
+      'server-error': '联机服务器暂时不可用，请稍后重试',
+      'socket-error': '联机服务器连接异常，请检查网络后重试',
+      'socket-closed': '联机服务器连接已关闭，请重试',
+      webrtc: '浏览器无法建立联机连接，请切换网络后重试',
+      'browser-incompatible': '当前浏览器不支持联机，请使用最新版浏览器'
+    };
+    return messages[error.type] || error.message || fallback;
   }
 
   function prepareOnlineLobby() {
