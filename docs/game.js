@@ -1789,7 +1789,8 @@
     $('online-menu').hidden = false;
     $('online-waiting').hidden = true;
     $('online-character-select').hidden = true;
-    $('back-to-menu-btn').hidden = true;
+    $('back-to-menu-btn').hidden = false;
+    $('back-to-menu-btn').textContent = '返回模式选择';
     $('online-game-hud').hidden = true;
     $('online-error').textContent = message || '';
     onlineState = 'menu';
@@ -2341,7 +2342,10 @@
     });
   });
   $('cancel-waiting-btn').addEventListener('click', leaveOnlineRoom);
-  $('back-to-menu-btn').addEventListener('click', leaveOnlineRoom);
+  $('back-to-menu-btn').addEventListener('click', () => {
+    if (onlineState === 'menu') returnToMenu('cpu');
+    else leaveOnlineRoom();
+  });
 
   syncMode();
   resetPlayers();
