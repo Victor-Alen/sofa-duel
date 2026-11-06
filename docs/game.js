@@ -1907,6 +1907,14 @@
           react(me, 'focused', me.castTotal);
           characterSound(me, 'skill');
         }
+        // 贴身角力: the host counts authoritatively, but the guest should still
+        // hear its own taps instantly (audio is per-device).
+        if (game.rule && game.rule.id === 'mash' && game.rulePhase === 'active' && me.stunned <= 0) {
+          const other = players[0];
+          if (other && dist(me, other) <= (game.rule.contactRange || 52)) {
+            tone(300 + Math.min((game.mashCounts[1] || 0) + 1, 14) * 26, .05, 'triangle', .035, 1.08);
+          }
+        }
         onlinePendingSkill = true;
         if (sendOnlineInput(true)) onlinePendingSkill = false;
       }
