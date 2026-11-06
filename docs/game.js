@@ -70,6 +70,7 @@
   const game = { mode: 'cpu', difficulty: 'normal', lastCpuPick: null, phase: 'menu', manualPicks: ['dash', 'guard'], picks: ['dash', 'guard'], scores: [0, 0], capture: [0, 0], time: ROUND_SECONDS, seats: [], sofaCount: 1, matchSofas: 1, lastSeatLayout: '', rule: null, previousRule: null, ruleHistory: [], ruleTarget: null, ruleMove: null, rulePhase: 'idle', elapsed: 0, round: 0, tiedRounds: 0, wait: 0, bannerTime: 0, bannerSeq: 0, playTipTime: 0, bannerText: '', particles: [], shake: 0, hitStop: 0, paused: false, audio: (() => { try { return localStorage.getItem('sofa-duel-audio') !== 'off'; } catch (_) { return true; } })(), audioContext: null, replay: null, highlightFrames: [], highlightClock: 0, lastImpact: null, standoff: false, combo: [0, 0], maxCombo: [0, 0], mashCounts: [0, 0], stats: loadStats(), music: null, musicGain: null, achievementQueue: [], currentAchievement: null };
   let last = performance.now();
   let lastBumpAt = 0;  // throttle the body-squeeze thud
+  let lastCaptureTickAt = 0;  // throttle the capture heartbeat
 
   function makePlayer(i) {
     return { i, characterId: i ? 'guard' : 'dash', x: i ? 740 : 220, y: 360, vx: 0, vy: 0, facingX: i ? -1 : 1, facingY: 0, dashLeft: 0, dashHit: false, shieldLeft: 0, shieldHit: false, pulseLeft: 0, pullLeft: 0, warpLeft: 0, reboundLeft: 0, reboundX: 0, reboundY: 0, reboundPower: 0, trap: null, skillCooldown: 0, stunned: 0, blink: 0, walk: 0, aiDecision: 0, wantsSkill: false, anim: i * 1.7, emotion: 'neutral', emotionLeft: 0, castLeft: 0, castTotal: .4, impactLeft: 0, celebrateLeft: 0 };
@@ -217,7 +218,10 @@
         // light arpeggio pulse: one soft high note per second keeps the loop alive
         for (let beat = 0; beat < 4; beat++) playPluck(chord[beat % chord.length], now + beat + .02);
         chordIndex++;
-        game.music = setTimeout(loopMusic, 4000);
+        // Dynamic tempo: the hotter the combo, the faster the loop drives the room.
+        const heat = Math.max(game.combo[0], game.combo[1]);
+        const interval = heat >= 3 ? 3200 : heat >= 2 ? 3600 : 4000;
+        game.music = setTimeout(loopMusic, interval);
       };
       loopMusic();
     } catch (_) { game.music = null; }
@@ -1372,6 +1376,13 @@
       showBanner('沙发对峙 · 先把对手逼起身', 1.1);
     }
     game.capture = game.seats.reduce((best, seat) => [Math.max(best[0], seat.capture[0]), Math.max(best[1], seat.capture[1])], [0, 0]);
+    // Capture heartbeat: as someone closes in on a point, a soft tick speeds up
+    // the tension (throttled; audio only, zero gameplay effect).
+    const closingIn = Math.max(game.capture[0], game.capture[1]);
+    if (closingIn > .9 && performance.now() - lastCaptureTickAt > (closingIn > 1.3 ? 260 : 420)) {
+      lastCaptureTickAt = performance.now();
+      tone(760 + Math.round(closingIn * 120), .045, 'square', .028);
+    }
     if (game.time <= 0 && game.phase === 'playing' && game.seats.length) {
       const totals = game.seats.reduce((sum, seat) => [sum[0] + seat.capture[0], sum[1] + seat.capture[1]], [0, 0]);
       if (Math.abs(totals[0] - totals[1]) > .01) {
