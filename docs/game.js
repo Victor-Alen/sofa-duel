@@ -2,7 +2,9 @@
   'use strict';
 
   const canvas = document.getElementById('game');
-  const ctx = canvas.getContext('2d');
+  // alpha:false: the game fills the full frame every tick, so the compositor
+  // gets an opaque fast path (measurable on phones).
+  const ctx = canvas.getContext('2d', { alpha: false });
   const $ = id => document.getElementById(id);
   const W = 960, H = 540;
   const CHARACTERS = window.SofaCharacters;
@@ -1752,13 +1754,15 @@
     game.highlightFrames.push(frame);
   }
 
+  let replayShade = null; // cached: identical every frame, allocation-free replays
   function renderHighlight() {
     const frames = game.highlightFrames;
     const position = Math.min(frames.length - 1, game.replay.elapsed / game.replay.duration * frames.length);
     const frame = frames[Math.max(0, Math.floor(position))];
     ctx.fillStyle = '#202534'; ctx.fillRect(0, 0, W, H);
     ctx.drawImage(frame, 0, 0, W, H);
-    const shade = ctx.createLinearGradient(0, 0, 0, H);
+    if (!replayShade) replayShade = ctx.createLinearGradient(0, 0, 0, H);
+    const shade = replayShade;
     shade.addColorStop(0, '#20253455'); shade.addColorStop(.25, '#20253400'); shade.addColorStop(.75, '#20253400'); shade.addColorStop(1, '#20253466');
     ctx.fillStyle = shade; ctx.fillRect(0, 0, W, H);
   }
