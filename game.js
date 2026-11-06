@@ -913,8 +913,10 @@
     tone(300 + Math.min(game.mashCounts[p.i], 14) * 26, .05, 'triangle', .035, 1.08);
     updateRuleHud();
     if (game.mashCounts[p.i] >= game.rule.mashGoal) {
+      // 手速奖励：领先越多，把对手撞得越远（撞到墙为止）。
+      const lead = Math.max(0, game.mashCounts[p.i] - game.mashCounts[1 - p.i]);
       game.mashCounts = [0, 0];
-      pushAway(p, other, 460, .3);
+      pushAway(p, other, 420 + lead * 130, .32);
       scorePoint(p.i, 'mash');
     }
   }

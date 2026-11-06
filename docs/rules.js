@@ -19,7 +19,7 @@
     },
     mash: {
       id: 'mash', icon: '🤜', name: '贴身角力',
-      description: '怼在一起时疯狂点击，先点满 8 次者得分并轰飞对手',
+      description: '怼在一起时疯狂点击，先点满 8 次者得分，点得越多撞得越远',
       mashGoal: 8, contactRange: 52
     }
   };
