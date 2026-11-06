@@ -71,10 +71,10 @@
           </div>
         </div>
         <div id="online-screen" class="screen" aria-live="polite">
-          <div class="screen-card online-card">
+          <div class="screen-card online-card" role="dialog" aria-modal="true" aria-labelledby="online-title">
             <span class="card-icon">🌐</span>
             <p class="card-kicker">ONLINE MODE</p>
-            <h2>联网对战</h2>
+            <h2 id="online-title" tabindex="-1">联网对战</h2>
             <div id="online-menu" class="online-menu">
               <button id="create-room-btn" class="primary-btn">创建房间 <span>+</span></button>
               <div class="online-divider"><span>或</span></div>
@@ -98,14 +98,15 @@
               <button id="cancel-waiting-btn" class="secondary-btn">取消</button>
             </div>
             <div id="online-character-select" class="online-character-select" hidden>
-              <p class="select-hint">选择你的角色</p>
-              <div id="online-picker" class="character-options"></div>
+              <p class="select-hint">请先选择角色，再点击“准备好”</p>
+              <div id="online-picker" class="character-options" aria-label="选择你的角色"></div>
               <div class="online-status">
-                <div class="status-player ready"><span>●</span><small>你: <span id="online-p1-char">-</span></small></div>
-                <div class="status-player" id="online-p2-status"><span>○</span><small>对手: <span id="online-p2-char">等待中</span></small></div>
+                <div class="status-player" id="online-p1-status"><span>○</span><small>你：<span id="online-p1-char">未选择</span></small><em id="online-p1-ready">未准备</em></div>
+                <div class="status-player" id="online-p2-status"><span>○</span><small>对手：<span id="online-p2-char">未选择</span></small><em id="online-p2-ready">未准备</em></div>
               </div>
+              <button id="online-ready-btn" class="primary-btn online-ready-btn" type="button" disabled>准备好 <span>✓</span></button>
             </div>
-            <button id="back-to-menu-btn" class="secondary-btn" hidden>返回菜单</button>
+            <button id="back-to-menu-btn" class="secondary-btn" hidden>离开房间</button>
           </div>
         </div>
         <div id="online-game-hud" class="online-game-hud" hidden>

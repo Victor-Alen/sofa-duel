@@ -176,6 +176,13 @@
     }
 
     handleConnection(conn, onOpen, onError, onClose) {
+      // A room has exactly two seats. If a third device (or a stale reconnect)
+      // dials in while the live channel is still open, refuse it instead of
+      // silently replacing this.conn and breaking the ongoing match.
+      if (this.conn && this.conn !== conn && this.conn.open) {
+        try { conn.close(); } catch (_) {}
+        return;
+      }
       this.conn = conn;
       let opened = false;
       conn.on('open', () => {

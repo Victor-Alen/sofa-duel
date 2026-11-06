@@ -254,7 +254,7 @@ body.record-mode .rule-hud{max-width:78%;font-size:12px}
 @media(max-width:760px){.achievement-popup{top:12px}.ach-content{padding:10px 14px;gap:8px}.ach-icon{font-size:24px}.ach-content strong{font-size:12px}.ach-content p{font-size:10px}}
 
 /* Online Multiplayer Styles */
-.online-card{min-width:min(400px,90%)}
+.online-card{min-width:min(400px,90%);max-height:94%;overflow-y:auto}
 .online-menu[hidden],.online-waiting[hidden],.online-character-select[hidden],#back-to-menu-btn[hidden]{display:none!important}
 .online-menu{display:flex;flex-direction:column;gap:12px;margin-top:16px}
 .online-error{min-height:18px;margin:0;color:#c94135;font-size:12px;font-weight:800;line-height:1.5}
@@ -276,13 +276,28 @@ body.record-mode .rule-hud{max-width:78%;font-size:12px}
 .waiting-player span{font-size:24px;color:#ff6c52}
 .waiting-player.ready span{color:#4caf50}
 .waiting-player small{font-size:11px;color:#89858d;font-weight:700}
-.online-character-select{display:flex;flex-direction:column;align-items:center;gap:16px;margin-top:16px}
-.select-hint{font-size:13px;color:#89858d;margin:0}
-.online-status{display:flex;gap:20px;justify-content:center;margin-top:8px}
-.status-player{display:flex;flex-direction:column;align-items:center;gap:4px;padding:10px 14px;border-radius:10px;background:#f9f3ec}
-.status-player span{font-size:20px;color:#ccc}
-.status-player.ready span{color:#4caf50}
-.status-player small{font-size:11px;color:#89858d;font-weight:700}
+.online-character-select{display:flex;flex-direction:column;align-items:stretch;gap:12px;width:100%;margin-top:12px}
+#online-title:focus{outline:none}
+.select-hint{font-size:13px;color:#89858d;margin:0;text-align:center;line-height:1.5}
+#online-picker{width:100%}
+#online-picker .character-choice{opacity:.82}
+#online-picker .character-choice.selected{opacity:1;border-color:#4caf50;box-shadow:0 0 0 2px #4caf5033;background:#f4fff3}
+#online-picker .character-choice:disabled{cursor:not-allowed;transform:none}
+#online-picker .character-choice:disabled:not(.selected){opacity:.38}
+.online-status{display:flex;gap:12px;justify-content:center;margin-top:0}
+.status-player{display:flex;flex:1;flex-direction:column;align-items:center;gap:3px;min-width:0;padding:9px 10px;border:1px solid transparent;border-radius:10px;background:#f9f3ec}
+.status-player>span{font-size:18px;line-height:1;color:#b9b0b2}
+.status-player.ready{border-color:#4caf5044;background:#f1faf0}
+.status-player.ready>span{color:#4caf50}
+.status-player small{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;color:#89858d;font-weight:700}
+.status-player em{font-size:10px;font-style:normal;font-weight:800;color:#a19491}
+.status-player.ready em{color:#358438}
+.online-ready-btn{width:100%;margin-top:0}
+.online-ready-btn.is-ready{background:#4caf50;border-bottom-color:#358438}
+body.desktop-mode #online-picker .character-choice.selected{background:#203b32;border-color:#4caf50}
+body.desktop-mode .status-player.ready{background:#203b32;border-color:#4caf5044}
+body.desktop-mode .status-player em{color:#7a85a0}
+body.desktop-mode .status-player.ready em{color:#83d687}
 .online-game-hud{position:absolute;top:12px;left:50%;transform:translateX(-50%);z-index:6;display:flex;align-items:center;gap:16px;padding:8px 16px;background:#fff9f0;border-radius:20px;border:1px solid #eaded2;box-shadow:0 4px 12px #45372213}
 .online-game-hud[hidden]{display:none}
 .online-player-info{display:flex;gap:12px;align-items:center}
@@ -299,13 +314,19 @@ body.record-mode .rule-hud{max-width:78%;font-size:12px}
 .lag-indicator.slow{background:#fff3e0;color:#e65100}
 .lag-indicator.very-slow{background:#ffebee;color:#c62828}
 @media(max-width:760px){
-  .online-card{min-width:min(320px,92%)}
+  .online-card{min-width:min(340px,94%);padding:14px 12px}
+  .online-card .card-icon{display:none}
+  .online-card h2{font-size:20px;margin-bottom:4px}
+  .online-character-select{gap:9px;margin-top:8px}
   .join-room-form{flex-direction:column}
   .join-room-form .secondary-btn{width:100%}
   .room-code-display strong{font-size:26px;letter-spacing:4px}
   .waiting-players{gap:12px}
   .waiting-player{min-width:80px;padding:10px 12px}
-  .online-status{gap:12px}
+  .online-status{gap:8px}
+  .status-player{padding:7px 6px}
+  .online-card .status-player small,.online-card .waiting-player small,.online-card .room-code-display small{display:block;margin-top:0}
+  .online-ready-btn{margin-top:2px}
   .online-game-hud{top:8px;padding:6px 12px;gap:10px}
 }
 
@@ -357,5 +378,7 @@ body.desktop-mode .help-body section{border-color:#2a3350}
   .difficulty-selector{margin:6px 0}
   body.multi-sofa .canvas-frame{height:auto;aspect-ratio:4/3;max-height:calc(100dvh - 245px)}
   body.multi-sofa .canvas-frame canvas{position:absolute;top:0;left:50%;width:auto;height:100%;max-width:none;aspect-ratio:auto;transform:translateX(-50%)}
+  body.online-match .canvas-frame{height:auto;aspect-ratio:16/9;max-height:calc(100dvh - 245px)}
+  body.online-match .canvas-frame canvas{position:static;width:100%;height:auto;max-width:100%;aspect-ratio:16/9;transform:none}
   body:not(.in-match) .mobile-controls{display:none}
 }
