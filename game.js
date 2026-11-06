@@ -786,6 +786,12 @@
     }
     game.shake = .12;
     tone(160, .13, 'square', .035, .75);
+    // Sync the impact to the online guest: particles/shake/sound are local,
+    // so without this the guest would feel none of the punch.
+    if (game.mode === 'online') {
+      onlineImpactQueue.push({ side: victim.i, kind: CHARACTERS[attacker.characterId].skill.kind, x: victim.x, y: victim.y });
+      if (onlineImpactQueue.length > 8) onlineImpactQueue.shift();
+    }
     return hit;
   }
 
@@ -1882,6 +1888,8 @@
   let onlineEchoTimestamp = 0;   // latest guest input timestamp, echoed by the host
   let onlineEchoAt = -Infinity;  // host-side arrival time of that input
   let onlineLastSnapshotAt = 0;  // guest-side: last time a host snapshot arrived
+  let onlineImpactQueue = [];    // host-side: impact events waiting to be synced
+  let guestHitStop = 0;          // guest-side: brief freeze on synced impacts
   let onlineHostReplaying = false; // guest-side: host is showing a highlight replay
   let onlineReconnectTimer = null; // host-side grace window for a dropped guest
   let remoteInterpolation = freshInterpolation();
@@ -2263,6 +2271,7 @@
     onlinePendingSkill = false;
     onlineLastBannerSeq = 0;
     onlineLastSnapshotAt = 0;
+    guestHitStop = 0;
     onlineHostReplaying = false;
     remoteInterpolation = freshInterpolation();
     clearHighlight();
@@ -2321,6 +2330,7 @@
       banner: { seq: game.bannerSeq, text: game.bannerText, time: game.bannerTime },
       echo: performance.now() - onlineEchoAt < 600 ? onlineEchoTimestamp : null,
       replaying: Boolean(game.replay),
+      impacts: onlineImpactQueue.splice(0, onlineImpactQueue.length),
       result: game.phase === 'finished' ? { winner: game.scores[0] > game.scores[1] ? 0 : 1 } : null
     };
   }
@@ -2343,6 +2353,15 @@
     game.phase = state.phase;
     game.scores = [...state.scores];
     if (Array.isArray(state.mash) && state.mash.length === 2) game.mashCounts = [...state.mash];
+    if (Array.isArray(state.impacts)) {
+      for (const imp of state.impacts) {
+        if (!imp || !Number.isFinite(imp.x) || !Number.isFinite(imp.y)) continue;
+        burst(imp.x, imp.y, imp.side, 16);
+        game.shake = Math.max(game.shake, .12);
+        tone(160, .13, 'square', .035, .75);
+        guestHitStop = .06;
+      }
+    }
     game.capture = state.capture || game.capture;
     game.standoff = Boolean(state.standoff);
     game.rule = state.rule ? RULES[state.rule] : null;
@@ -2453,6 +2472,13 @@
   }
 
   function updateOnlineClient(dt) {
+    if (guestHitStop > 0) {
+      // Classic impact freeze: hold the frame briefly so the hit lands.
+      guestHitStop = Math.max(0, guestHitStop - dt);
+      game.bannerTime = Math.max(0, game.bannerTime - dt);
+      updateHud();
+      return;
+    }
     updatePresentation(dt);
     game.bannerTime = Math.max(0, game.bannerTime - dt);
     if (!game.bannerTime) $('round-banner').classList.remove('show');
@@ -2684,6 +2710,8 @@
     onlineEchoAt = -Infinity;
     onlineLastSnapshotAt = 0;
     onlineHostReplaying = false;
+    onlineImpactQueue = [];
+    guestHitStop = 0;
     keys.clear();
     stickEnd();
     clearHighlight();
