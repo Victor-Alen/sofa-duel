@@ -1621,6 +1621,25 @@
     ctx.fillStyle = shade; ctx.fillRect(0, 0, W, H);
   }
 
+  // Mobile online players see the full arena squeezed into a tiny strip; a
+  // player-following camera zooms the world drawing without touching physics,
+  // inputs, or host sync. Desktop and local modes keep the plain full view.
+  function onlineCamera() {
+    if (game.mode !== 'online' || !narrowScreen()) return null;
+    const me = players[localPlayerIndex()];
+    if (!me) return null;
+    const scale = 1.45;
+    const viewW = W / scale, viewH = H / scale;
+    // Frame both the player and the nearest sofa when possible, biased
+    // towards the player, so round start never stares at empty floor.
+    const seat = nearestSeat(me) || me;
+    const targetX = seat.x + (me.x - seat.x) * .7;
+    const targetY = seat.y + (me.y - seat.y) * .7;
+    const x = Math.max(viewW / 2, Math.min(W - viewW / 2, targetX));
+    const y = Math.max(viewH / 2, Math.min(H - viewH / 2, targetY));
+    return { scale, x, y };
+  }
+
   function render(now) {
     ctx.clearRect(0, 0, W, H);
     if (game.replay && game.highlightFrames.length) {
@@ -1629,6 +1648,8 @@
     }
     ctx.save();
     if (game.shake > 0) ctx.translate((Math.random() - .5) * 8, (Math.random() - .5) * 8);
+    const cam = onlineCamera();
+    if (cam) { ctx.translate(W / 2, H / 2); ctx.scale(cam.scale, cam.scale); ctx.translate(-cam.x, -cam.y); }
     drawRoom(now);
     drawSofa(now);
     drawTraps(now);
@@ -2646,6 +2667,8 @@
     game.audio = false;
     window.SofaBench = {
       step(dt = .033) { update(dt); },
+      render: now => render(now),  // bench hook: probes pump occluded tabs
+      update: dt => update(dt),
       online() {
         return {
           state: onlineState, playerNumber: onlinePlayerNumber, roomCode: onlineRoomCode,
