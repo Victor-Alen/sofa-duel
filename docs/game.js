@@ -958,6 +958,8 @@
       game.mashCounts = [0, 0];
       pushAway(p, other, 420 + lead * 130, .32);
       scorePoint(p.i, 'mash');
+      // Victory arpeggio: a rising three-note confirm on top of the score sounds.
+      [1, 1.25, 1.5].forEach((mult, i) => setTimeout(() => tone(523 * mult, .12, 'triangle', .05, 1.02), i * 90));
     }
   }
 
