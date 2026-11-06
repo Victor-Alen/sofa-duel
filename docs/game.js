@@ -1136,9 +1136,13 @@
       return { x: dx, y: dy };
     }
     if (game.mode === 'online' && p.i === 1) {
-      p.wantsSkill = onlineOpponentInput.skill;
+      // Input watchdog: a backgrounded/locked guest stops sending input, and
+      // without this their character would keep walking in the last direction.
+      const stale = onlineLastInputAt && performance.now() - onlineLastInputAt > 250;
+      if (stale) onlineOpponentInput.skill = false;
+      p.wantsSkill = stale ? false : onlineOpponentInput.skill;
       onlineOpponentInput.skill = false;
-      return { x: onlineOpponentInput.x, y: onlineOpponentInput.y };
+      return stale ? { x: 0, y: 0 } : { x: onlineOpponentInput.x, y: onlineOpponentInput.y };
     }
     let x, y;
     if (p.i === 0) {
@@ -1951,6 +1955,7 @@
   let onlineEchoAt = -Infinity;  // host-side arrival time of that input
   let onlineLastSnapshotAt = 0;  // guest-side: last time a host snapshot arrived
   let onlineImpactQueue = [];    // host-side: impact events waiting to be synced
+  let onlineLastInputAt = 0;     // host-side: last guest input arrival (watchdog)
   let guestHitStop = 0;          // guest-side: brief freeze on synced impacts
   let onlineHostReplaying = false; // guest-side: host is showing a highlight replay
   let onlineReconnectTimer = null; // host-side grace window for a dropped guest
@@ -2668,6 +2673,7 @@
           onlineOpponentInput = { x, y, skill: onlineOpponentInput.skill || Boolean(data.skill) };
           if (data.skill) registerMash(players[1]);
           if (Number.isFinite(data.timestamp)) { onlineEchoTimestamp = data.timestamp; onlineEchoAt = performance.now(); }
+          onlineLastInputAt = performance.now();
         }
         break;
       case 'gameState':
