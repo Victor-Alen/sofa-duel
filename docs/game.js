@@ -383,13 +383,13 @@
     let spots = seatLayout(game.matchSofas);
     for (let attempt = 0; attempt < 4 && game.matchSofas > 1 && seatSignature(spots) === game.lastSeatLayout; attempt++) spots = seatLayout(game.matchSofas);
     game.lastSeatLayout = seatSignature(spots);
-    game.seats = spots.map(([x, y]) => ({ x, y, capture: [0, 0] }));
+    game.seats = spots.map(([x, y]) => ({ x, y, capture: [0, 0], scale: 1 }));
     const choices = RULE_IDS.filter(id => id !== game.previousRule);
     const ruleId = forcedRule || choices[Math.floor(Math.random() * choices.length)];
     game.rule = RULES[ruleId];
     game.previousRule = ruleId;
     game.ruleHistory.push(ruleId);
-    game.rulePhase = ruleId === 'frenzy' || ruleId === 'mash' ? 'active' : 'idle';
+    game.rulePhase = ruleId === 'frenzy' || ruleId === 'mash' || ruleId === 'morph' ? 'active' : 'idle';
     game.ruleMove = null;
     game.elapsed = 0;
     if (game.mode === 'online') {
@@ -406,10 +406,14 @@
     $('record-hook').textContent = {
       shuffle: '室友抢沙发，沙发先跑了！',
       spring: '抢沙发，沙发把人弹飞了！',
-      frenzy: '室友抢沙发，技能突然加速！'
-    }[ruleId];
+      frenzy: '室友抢沙发，技能突然加速！',
+      mash: '室友抢沙发，贴身角力开始了！',
+      morph: '室友抢沙发，沙发开始变形！'
+    }[ruleId] || '';
     resetPlayers();
-    showBanner(`第 ${game.round} 回合 · ${game.rule.name}`, 1.1);
+    const suddenDeath = game.scores[0] === WIN_SCORE - 1 && game.scores[1] === WIN_SCORE - 1;
+    showBanner(`第 ${game.round} 回合 · ${game.rule.name}${suddenDeath ? ' · 决胜分！' : ''}`, suddenDeath ? 1.6 : 1.1);
+    if (suddenDeath) tone(520, .2, 'triangle', .06, 1.35);
     updateRuleHud();
     updateHud();
   }
@@ -454,6 +458,8 @@
     game.tiedRounds = 0;
     game.ruleHistory = [];
     game.mashCounts = [0, 0];
+    game.morphT = 0; game.morphPhase = -1;
+    game.morphT = 0; game.morphPhase = -1;
     game.previousRule = null;
     game.lastSeatLayout = '';
     game.seats = [];
@@ -603,6 +609,8 @@
     game.rulePhase = 'idle';
     game.ruleHistory = [];
     game.mashCounts = [0, 0];
+    game.morphT = 0; game.morphPhase = -1;
+    game.morphT = 0; game.morphPhase = -1;
     game.ruleTarget = null;
     game.ruleMove = null;
     game.seats = [];
@@ -950,6 +958,25 @@
   function updateRoomRule(dt) {
     if (onlinePlayerNumber === 1) return; // The host owns sofa movement in online matches.
     if (!game.rule || game.rule.id === 'frenzy' || game.rule.id === 'mash' || game.rulePhase === 'triggered') return;
+    if (game.rule.id === 'morph') {
+      // 沙发变变变: cycle the sofa between small and large; the capture ring
+      // and its hitbox follow the visual scale (host animates, guest mirrors).
+      game.morphT = (game.morphT || 0) + dt;
+      const phaseIndex = Math.floor(game.morphT / game.rule.morphCycle) % 2;
+      if (game.morphPhase !== phaseIndex) {
+        game.morphPhase = phaseIndex;
+        showBanner(phaseIndex === 0 ? '沙发缩小！' : '沙发变大！', .8);
+        tone(phaseIndex === 0 ? 320 : 460, .16, 'triangle', .05, phaseIndex === 0 ? .8 : 1.25);
+        for (const seat of game.seats) burst(seat.x, seat.y - 10, 0, 8);
+      }
+      const target = phaseIndex === 0 ? game.rule.minScale : game.rule.maxScale;
+      for (const seat of game.seats) {
+        if (seat.scale === undefined) seat.scale = 1;
+        seat.scale += (target - seat.scale) * Math.min(1, dt * 2.4);
+      }
+      updateRuleHud();
+      return;
+    }
     game.elapsed += dt;
     if (game.rulePhase === 'moving') {
       const move = game.ruleMove;
@@ -1150,7 +1177,10 @@
       p.vx *= Math.pow(.9, dt * 60);
       p.vy *= Math.pow(.9, dt * 60);
     } else {
-      const speed = CHARACTERS[p.characterId].speed;
+      let speed = CHARACTERS[p.characterId].speed;
+      // Rubber band: the trailing player gets a gentle boost so matches stay
+      // tense until the last point (applies identically on host and guest).
+      if (game.phase === 'playing' && game.scores[1 - p.i] > game.scores[p.i]) speed *= 1.08;
       p.vx = move.x * speed;
       p.vy = move.y * speed;
       if (Math.hypot(move.x, move.y) > .15) {
@@ -1159,8 +1189,21 @@
       }
     }
     const edge = playArea();
-    p.x = Math.max(edge[0], Math.min(edge[1], p.x + p.vx * dt));
-    p.y = Math.max(142, Math.min(H - 39, p.y + p.vy * dt));
+    const targetX = p.x + p.vx * dt, targetY = p.y + p.vy * dt;
+    const wallHitX = (targetX < edge[0] || targetX > edge[1]) && Math.abs(p.vx) > 220;
+    const wallHitY = (targetY < 142 || targetY > H - 39) && Math.abs(p.vy) > 220;
+    p.x = Math.max(edge[0], Math.min(edge[1], targetX));
+    p.y = Math.max(142, Math.min(H - 39, targetY));
+    // A hard knock into a wall bounces with stars and a thud: the payoff for
+    // 贴身角力's 撞得远 and for every big knockback.
+    if ((p.stunned > 0 || p.dashLeft > 0) && (wallHitX || wallHitY)) {
+      if (wallHitX) p.vx = -p.vx * .45;
+      if (wallHitY) p.vy = -p.vy * .45;
+      p.blink = Math.max(p.blink, .3);
+      burst(p.x, p.y - 10, p.i, 10);
+      tone(120, .1, 'square', .05, .6);
+      game.shake = Math.max(game.shake, .14);
+    }
   }
 
   function collide() {
@@ -1305,10 +1348,10 @@
     // With several sofas, two campers on separate seats would otherwise both fill up
     // at the same moment and the array order would decide the round. When the opponent
     // is lounging on a different sofa, progress freezes until someone breaks the standoff.
-    const seated = players.map(p => game.seats.some(seat => dist(p, seat) < CAPTURE_RADIUS && p.stunned <= 0));
+    const seated = players.map(p => game.seats.some(seat => dist(p, seat) < CAPTURE_RADIUS * (seat.scale || 1) && p.stunned <= 0));
     let standoff = false;
     for (const seat of game.seats) {
-      const inside = players.map(p => dist(p, seat) < CAPTURE_RADIUS && p.stunned <= 0);
+      const inside = players.map(p => dist(p, seat) < CAPTURE_RADIUS * (seat.scale || 1) && p.stunned <= 0);
       if (inside[0] !== inside[1]) {
         const i = inside[0] ? 0 : 1;
         if (seated[1 - i]) { standoff = true; continue; }
@@ -1452,6 +1495,9 @@
       ctx.strokeStyle = '#fff8a2'; ctx.lineWidth = 8;
       ctx.beginPath(); ctx.arc(x, y + 12, 116 + Math.sin(now / 75) * 7, 0, 7); ctx.stroke();
     }
+    const k = seat.scale || 1;
+    ctx.save();
+    ctx.translate(x, y + 12); ctx.scale(k, k); ctx.translate(-x, -(y + 12));
     ctx.fillStyle = '#725e6040'; ctx.beginPath(); ctx.ellipse(x, y + 58, 111, 28, 0, 0, 7); ctx.fill();
     // Occupation aura and progress arcs, one per sofa.
     ctx.save(); ctx.translate(x, y + 12);
@@ -1476,6 +1522,7 @@
     const frozen = game.standoff && game.seats.length > 1 && seat.capture[0] + seat.capture[1] > .05;
     ctx.fillStyle = frozen ? '#ffe0a8' : '#fff8ed'; ctx.font = '800 12px DM Sans, sans-serif'; ctx.textAlign = 'center';
     ctx.fillText(game.seats.length > 1 ? `SEAT ${index + 1}${frozen ? ' · 对峙' : ''}` : 'ONLY ONE SEAT', x, y - 54);
+    ctx.restore();
   }
 
   function drawTraps(now) {
@@ -2251,6 +2298,8 @@
     game.round = 0;
     game.ruleHistory = [];
     game.mashCounts = [0, 0];
+    game.morphT = 0; game.morphPhase = -1;
+    game.morphT = 0; game.morphPhase = -1;
     game.rule = null;
     game.rulePhase = 'idle';
     game.ruleTarget = null;
@@ -2370,11 +2419,12 @@
     if (Array.isArray(state.ruleHistory)) game.ruleHistory = state.ruleHistory;
     if (Array.isArray(state.seats)) {
       if (game.seats.length !== state.seats.length) {
-        game.seats = state.seats.map(seat => ({ x: seat.x, y: seat.y, capture: [...seat.capture] }));
+        game.seats = state.seats.map(seat => ({ x: seat.x, y: seat.y, capture: [...seat.capture], scale: seat.scale || 1 }));
       } else {
         state.seats.forEach((seat, i) => {
           game.seats[i].x = seat.x;
           game.seats[i].y = seat.y;
+          game.seats[i].scale = seat.scale || 1;
           game.seats[i].capture = [...seat.capture];
         });
       }
@@ -2818,7 +2868,8 @@
           myReady: onlineMyReady, opponentReady: onlineOpponentReady,
           epoch: onlineLobbyEpoch, matchId: onlineMatchId, pendingSkill: onlinePendingSkill,
           bounds: playArea(), interpolationDuration: remoteInterpolation.interpDuration,
-          seats: game.seats.map(seat => ({ x: seat.x, y: seat.y, capture: [...seat.capture] })),
+          seats: game.seats.map(seat => ({ x: seat.x, y: seat.y, capture: [...seat.capture], scale: seat.scale || 1 })),
+          morphT: game.morphT || 0, morphPhase: game.morphPhase, rulePhase: game.rulePhase,
           players: players.map(p => ({ x: p.x, y: p.y, cooldown: p.skillCooldown, characterId: p.characterId })),
           opponentInput: { ...onlineOpponentInput }
         };
