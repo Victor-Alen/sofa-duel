@@ -672,6 +672,8 @@
     if (game.mode === 'online' && onlinePlayerNumber === 1 && onlineState === 'playing'
         && onlineLastSnapshotAt && performance.now() - onlineLastSnapshotAt > 3000) {
       $('status-label').textContent = '对方网络不稳定…';
+    } else if (game.mode === 'online' && onlinePlayerNumber === 1 && onlineHostReplaying) {
+      $('status-label').textContent = '对手精彩回放中…';
     }
   }
 
@@ -1776,6 +1778,7 @@
   let onlineEchoTimestamp = 0;   // latest guest input timestamp, echoed by the host
   let onlineEchoAt = -Infinity;  // host-side arrival time of that input
   let onlineLastSnapshotAt = 0;  // guest-side: last time a host snapshot arrived
+  let onlineHostReplaying = false; // guest-side: host is showing a highlight replay
   let onlineReconnectTimer = null; // host-side grace window for a dropped guest
   let remoteInterpolation = freshInterpolation();
 
@@ -2144,6 +2147,7 @@
     onlinePendingSkill = false;
     onlineLastBannerSeq = 0;
     onlineLastSnapshotAt = 0;
+    onlineHostReplaying = false;
     remoteInterpolation = freshInterpolation();
     clearHighlight();
     resetPlayers();
@@ -2199,6 +2203,7 @@
       })),
       banner: { seq: game.bannerSeq, text: game.bannerText, time: game.bannerTime },
       echo: performance.now() - onlineEchoAt < 600 ? onlineEchoTimestamp : null,
+      replaying: Boolean(game.replay),
       result: game.phase === 'finished' ? { winner: game.scores[0] > game.scores[1] ? 0 : 1 } : null
     };
   }
@@ -2245,6 +2250,7 @@
       resetPlayers();
       remoteInterpolation = freshInterpolation();
     }
+    onlineHostReplaying = Boolean(state.replaying);
     if (Array.isArray(state.players)) {
       // Guest predicts its own movement between snapshots; the other player is interpolated.
       const remote = state.players[0];
@@ -2548,6 +2554,7 @@
     onlineEchoTimestamp = 0;
     onlineEchoAt = -Infinity;
     onlineLastSnapshotAt = 0;
+    onlineHostReplaying = false;
     keys.clear();
     stickEnd();
     clearHighlight();
