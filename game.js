@@ -1598,6 +1598,9 @@
   }
 
   function captureHighlight(now) {
+    // The online guest never plays replays (only the host scores points), so
+    // recording frames there is pure wasted CPU on the latency-sensitive device.
+    if (game.mode === 'online' && onlinePlayerNumber === 1) return;
     if (game.phase !== 'playing' || now - game.highlightClock < 1000 / HIGHLIGHT_FPS) return;
     game.highlightClock = now;
     const frame = game.highlightFrames.length >= HIGHLIGHT_FRAME_COUNT ? game.highlightFrames.shift() : highlightPool[game.highlightFrames.length];
