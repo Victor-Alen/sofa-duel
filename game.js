@@ -67,7 +67,7 @@
     frame.width = 480; frame.height = 270;
     return frame;
   });
-  const game = { mode: 'cpu', difficulty: 'normal', lastCpuPick: null, phase: 'menu', manualPicks: ['dash', 'guard'], picks: ['dash', 'guard'], scores: [0, 0], capture: [0, 0], time: ROUND_SECONDS, seats: [], sofaCount: 1, matchSofas: 1, lastSeatLayout: '', rule: null, previousRule: null, ruleHistory: [], ruleTarget: null, ruleMove: null, rulePhase: 'idle', elapsed: 0, round: 0, tiedRounds: 0, wait: 0, bannerTime: 0, bannerSeq: 0, playTipTime: 0, bannerText: '', particles: [], shake: 0, hitStop: 0, paused: false, audio: true, audioContext: null, replay: null, highlightFrames: [], highlightClock: 0, lastImpact: null, standoff: false, combo: [0, 0], maxCombo: [0, 0], stats: loadStats(), music: null, musicGain: null, achievementQueue: [], currentAchievement: null };
+  const game = { mode: 'cpu', difficulty: 'normal', lastCpuPick: null, phase: 'menu', manualPicks: ['dash', 'guard'], picks: ['dash', 'guard'], scores: [0, 0], capture: [0, 0], time: ROUND_SECONDS, seats: [], sofaCount: 1, matchSofas: 1, lastSeatLayout: '', rule: null, previousRule: null, ruleHistory: [], ruleTarget: null, ruleMove: null, rulePhase: 'idle', elapsed: 0, round: 0, tiedRounds: 0, wait: 0, bannerTime: 0, bannerSeq: 0, playTipTime: 0, bannerText: '', particles: [], shake: 0, hitStop: 0, paused: false, audio: true, audioContext: null, replay: null, highlightFrames: [], highlightClock: 0, lastImpact: null, standoff: false, combo: [0, 0], maxCombo: [0, 0], mashCounts: [0, 0], stats: loadStats(), music: null, musicGain: null, achievementQueue: [], currentAchievement: null };
   let last = performance.now();
   let lastBumpAt = 0;  // throttle the body-squeeze thud
 
@@ -255,6 +255,13 @@
       return;
     }
     const rule = game.rule;
+    if (rule.id === 'mash' && game.rulePhase === 'active') {
+      const li = localPlayerIndex();
+      hud.textContent = `${rule.icon} ${rule.name} · 你 ${game.mashCounts[li]} : ${game.mashCounts[1 - li]} 对手（先到 ${rule.mashGoal} 次）`;
+      hud.dataset.rule = rule.id;
+      hud.dataset.phase = game.rulePhase;
+      return;
+    }
     const suffix = game.rulePhase === 'warning' ? '马上生效！' :
       game.rulePhase === 'moving' ? '正在搬家！' :
       game.rulePhase === 'triggered' ? '已触发' : rule.description;
@@ -280,6 +287,7 @@
 
   function highlightTitle(winner, reason) {
     const name = CHARACTERS[game.picks[winner]].name;
+    if (reason === 'mash') return `${name}手速碾压！`;
     if (reason === 'draw') return `${name}赢得了这场幸运对决！`;
     if (reason === 'closest') return '只差一步，也是胜利！';
     if (reason === 'timeout') return '最后一秒，守住了！';
@@ -361,7 +369,7 @@
     game.rule = RULES[ruleId];
     game.previousRule = ruleId;
     game.ruleHistory.push(ruleId);
-    game.rulePhase = ruleId === 'frenzy' ? 'active' : 'idle';
+    game.rulePhase = ruleId === 'frenzy' || ruleId === 'mash' ? 'active' : 'idle';
     game.ruleMove = null;
     game.elapsed = 0;
     if (game.mode === 'online') {
@@ -425,6 +433,7 @@
     game.round = 0;
     game.tiedRounds = 0;
     game.ruleHistory = [];
+    game.mashCounts = [0, 0];
     game.previousRule = null;
     game.lastSeatLayout = '';
     game.seats = [];
@@ -466,7 +475,7 @@
     react(players[winner], 'happy', 2.8, true);
     react(players[1 - winner], 'sad', 2.2);
     const name = CHARACTERS[game.picks[winner]].name;
-    showBanner(reason === 'draw' ? `${name}赢得平局抽签！` : reason === 'closest' ? `${name}更近一步！` : reason === 'timeout' ? `${name}险胜！` : `${name}抢到了！`, 1.65);
+    showBanner(reason === 'draw' ? `${name}赢得平局抽签！` : reason === 'mash' ? `${name}手速碾压！` : reason === 'closest' ? `${name}更近一步！` : reason === 'timeout' ? `${name}险胜！` : `${name}抢到了！`, 1.65);
     characterSound(players[winner], 'win');
     characterSound(players[1 - winner], 'lose');
     updateHud();
@@ -573,6 +582,7 @@
     game.rule = null;
     game.rulePhase = 'idle';
     game.ruleHistory = [];
+    game.mashCounts = [0, 0];
     game.ruleTarget = null;
     game.ruleMove = null;
     game.seats = [];
@@ -890,9 +900,28 @@
     }
   };
 
+  // 贴身角力 (mash rule): while the rule is active and both players touch,
+  // every skill-button press counts; the first side to reach the goal scores
+  // a point and blasts the opponent away. Counting is authoritative on the
+  // host (local presses + guest input flags), never on the guest client.
+  function registerMash(p) {
+    if (game.phase !== 'playing' || !game.rule || game.rule.id !== 'mash' || game.rulePhase !== 'active') return;
+    const other = players[1 - p.i];
+    if (!other || dist(p, other) > game.rule.contactRange) return;
+    game.mashCounts[p.i]++;
+    burst(p.x, p.y - 26, p.i, 3);
+    tone(300 + Math.min(game.mashCounts[p.i], 14) * 26, .05, 'triangle', .035, 1.08);
+    updateRuleHud();
+    if (game.mashCounts[p.i] >= game.rule.mashGoal) {
+      game.mashCounts = [0, 0];
+      pushAway(p, other, 460, .3);
+      scorePoint(p.i, 'mash');
+    }
+  }
+
   function updateRoomRule(dt) {
     if (onlinePlayerNumber === 1) return; // The host owns sofa movement in online matches.
-    if (!game.rule || game.rule.id === 'frenzy' || game.rulePhase === 'triggered') return;
+    if (!game.rule || game.rule.id === 'frenzy' || game.rule.id === 'mash' || game.rulePhase === 'triggered') return;
     game.elapsed += dt;
     if (game.rulePhase === 'moving') {
       const move = game.ruleMove;
@@ -1780,7 +1809,7 @@
     if (event.code === 'Escape') exitFullscreen();
     if (event.code === 'KeyR' && game.phase !== 'menu' && game.mode !== 'online') startMatch();
     if (event.code === 'Space' && game.mode !== 'demo') useLocalSkill();
-    if (event.code === 'Enter' && game.mode === 'duo') useSkill(players[1]);
+    if (event.code === 'Enter' && game.mode === 'duo') { registerMash(players[1]); useSkill(players[1]); }
   });
   document.addEventListener('keyup', event => keys.delete(event.code));
   window.addEventListener('blur', () => { keys.clear(); stickEnd(); });
@@ -1857,6 +1886,9 @@
 
   function useLocalSkill() {
     if (game.mode === 'demo') return;
+    // 贴身角力: human presses count as mashes (host side counts its own; the
+    // online guest's presses are counted by the host from the input message).
+    if (!(game.mode === 'online' && onlinePlayerNumber === 1)) registerMash(players[localPlayerIndex()]);
     if (game.mode === 'online' && onlinePlayerNumber === 1) {
       // Send a skill press immediately instead of adding another input-tick of latency.
       if (game.phase === 'playing') {
@@ -2174,6 +2206,7 @@
     game.maxCombo = [0, 0];
     game.round = 0;
     game.ruleHistory = [];
+    game.mashCounts = [0, 0];
     game.rule = null;
     game.rulePhase = 'idle';
     game.ruleTarget = null;
@@ -2225,6 +2258,7 @@
       phase: game.phase,
       round: game.round,
       scores: [...game.scores],
+      mash: [...game.mashCounts],
       time: game.time,
       capture: [...game.capture],
       standoff: game.standoff,
@@ -2272,6 +2306,7 @@
     game.round = state.round;
     game.phase = state.phase;
     game.scores = [...state.scores];
+    if (Array.isArray(state.mash) && state.mash.length === 2) game.mashCounts = [...state.mash];
     game.capture = state.capture || game.capture;
     game.standoff = Boolean(state.standoff);
     game.rule = state.rule ? RULES[state.rule] : null;
@@ -2496,6 +2531,7 @@
           const length = Math.hypot(x, y);
           if (length > 1) { x /= length; y /= length; }
           onlineOpponentInput = { x, y, skill: onlineOpponentInput.skill || Boolean(data.skill) };
+          if (data.skill) registerMash(players[1]);
           if (Number.isFinite(data.timestamp)) { onlineEchoTimestamp = data.timestamp; onlineEchoAt = performance.now(); }
         }
         break;

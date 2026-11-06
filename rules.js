@@ -16,6 +16,11 @@
       id: 'frenzy', icon: '⚡', name: '技能狂欢',
       description: '双方技能冷却缩短，攻防更快',
       cooldownFactor: .68
+    },
+    mash: {
+      id: 'mash', icon: '🤜', name: '贴身角力',
+      description: '怼在一起时疯狂点击，先点满 8 次者得分并轰飞对手',
+      mashGoal: 8, contactRange: 52
     }
   };
   for (const rule of Object.values(rules)) Object.freeze(rule);
