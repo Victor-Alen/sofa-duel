@@ -47,7 +47,7 @@ v15 在完整保留六角色技能和对局规则的基础上，重点增强角�
 | 贴身角力 | 怼在一起时疯狂点击，先点满 8 次者得分，点得越多撞得越远 |
 | 沙发变变变 | 沙发周期性缩小和变大，占领圈跟着变 |
 
-正常对局避免连续两回合出现同一种规则。可在 `index.html` 后加 `?rule=shuffle`、`?rule=spring` 或 `?rule=frenzy` 固定规则；`?record=1` 可进入竖屏自动演示。
+正常对局避免连续两回合出现同一种规则。可在 `index.html` 后加 `?rule=shuffle`、`?rule=spring`、`?rule=frenzy`、`?rule=mash`（贴身角力）或 `?rule=morph`（沙发变变变）固定规则；`?record=1` 可进入竖屏自动演示。
 
 ## 验证
 
