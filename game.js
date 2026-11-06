@@ -67,7 +67,7 @@
     frame.width = 480; frame.height = 270;
     return frame;
   });
-  const game = { mode: 'cpu', difficulty: 'normal', lastCpuPick: null, phase: 'menu', manualPicks: ['dash', 'guard'], picks: ['dash', 'guard'], scores: [0, 0], capture: [0, 0], time: ROUND_SECONDS, seats: [], sofaCount: 1, matchSofas: 1, lastSeatLayout: '', rule: null, previousRule: null, ruleHistory: [], ruleTarget: null, ruleMove: null, rulePhase: 'idle', elapsed: 0, round: 0, tiedRounds: 0, wait: 0, bannerTime: 0, bannerSeq: 0, playTipTime: 0, bannerText: '', particles: [], shake: 0, hitStop: 0, paused: false, audio: true, audioContext: null, replay: null, highlightFrames: [], highlightClock: 0, lastImpact: null, standoff: false, combo: [0, 0], maxCombo: [0, 0], mashCounts: [0, 0], stats: loadStats(), music: null, musicGain: null, achievementQueue: [], currentAchievement: null };
+  const game = { mode: 'cpu', difficulty: 'normal', lastCpuPick: null, phase: 'menu', manualPicks: ['dash', 'guard'], picks: ['dash', 'guard'], scores: [0, 0], capture: [0, 0], time: ROUND_SECONDS, seats: [], sofaCount: 1, matchSofas: 1, lastSeatLayout: '', rule: null, previousRule: null, ruleHistory: [], ruleTarget: null, ruleMove: null, rulePhase: 'idle', elapsed: 0, round: 0, tiedRounds: 0, wait: 0, bannerTime: 0, bannerSeq: 0, playTipTime: 0, bannerText: '', particles: [], shake: 0, hitStop: 0, paused: false, audio: (() => { try { return localStorage.getItem('sofa-duel-audio') !== 'off'; } catch (_) { return true; } })(), audioContext: null, replay: null, highlightFrames: [], highlightClock: 0, lastImpact: null, standoff: false, combo: [0, 0], maxCombo: [0, 0], mashCounts: [0, 0], stats: loadStats(), music: null, musicGain: null, achievementQueue: [], currentAchievement: null };
   let last = performance.now();
   let lastBumpAt = 0;  // throttle the body-squeeze thud
 
@@ -247,6 +247,8 @@
 
   function updateRuleHud() {
     const hud = $('rule-hud');
+    const mashBar = $('mash-bar');
+    if (mashBar) mashBar.hidden = !(game.rule && game.rule.id === 'mash' && game.rulePhase === 'active' && game.phase === 'playing');
     if (!game.rule) {
       hud.textContent = '';
       delete hud.dataset.rule;
@@ -258,6 +260,10 @@
     if (rule.id === 'mash' && game.rulePhase === 'active') {
       const li = localPlayerIndex();
       hud.textContent = `${rule.icon} ${rule.name} · 你 ${game.mashCounts[li]} : ${game.mashCounts[1 - li]} 对手（先到 ${rule.mashGoal} 次）`;
+      if (mashBar) {
+        $('mash-bar-you').style.width = Math.min(100, game.mashCounts[li] / rule.mashGoal * 100) + '%';
+        $('mash-bar-foe').style.width = Math.min(100, game.mashCounts[1 - li] / rule.mashGoal * 100) + '%';
+      }
       hud.dataset.rule = rule.id;
       hud.dataset.phase = game.rulePhase;
       return;
@@ -1200,6 +1206,9 @@
   }
 
   function burst(x, y, side, count) {
+    // Mobile perf guard: cap the particle pool so long chaotic fights never
+    // accumulate thousands of draw calls.
+    if (game.particles.length > 240) game.particles.splice(0, game.particles.length - 240);
     const character = CHARACTERS[game.picks[side]];
     const colors = [character.color, character.light, '#fff', '#ffd064'];
     for (let i = 0; i < count; i++) {
@@ -1794,6 +1803,9 @@
     game.audio = !game.audio;
     $('sound-btn').textContent = game.audio ? '♪' : '×';
     $('sound-btn').setAttribute('aria-label', game.audio ? '关闭声音' : '打开声音');
+    try { localStorage.setItem('sofa-duel-audio', game.audio ? 'on' : 'off'); } catch (_) {}
+    if (!game.audio) stopBackgroundMusic();
+    else if (document.body.classList.contains('in-match') && !game.paused) startBackgroundMusic();
     tone(620, .09);
   });
   document.addEventListener('keydown', event => {

@@ -391,3 +391,11 @@ body.desktop-mode .help-body section{border-color:#2a3350}
 /* In-match exit for online games: the pause button is meaningless there. */
 .online-leave-btn{border:1px solid #e2b1a4;background:#fff3ec;color:#c4503a;font-family:inherit;font-weight:800;font-size:13px;padding:5px 12px;border-radius:14px;cursor:pointer}
 .online-leave-btn:hover{background:#ffe3d9}
+
+/* 贴身角力 meter + room-code visual uppercase */
+.mash-bar{position:absolute;top:62px;left:10%;width:80%;display:flex;gap:8px;z-index:5;pointer-events:none}
+.mash-bar[hidden]{display:none}
+.mash-you,.mash-foe{flex:1;height:10px;background:#00000022;border-radius:6px;overflow:hidden}
+.mash-you span{display:block;height:100%;width:0;background:#ff7056;transition:width .12s}
+.mash-foe span{display:block;height:100%;width:0;background:#5aa7e8;margin-left:auto;transition:width .12s}
+#room-code-input{text-transform:uppercase}
