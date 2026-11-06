@@ -2009,6 +2009,10 @@
           const other = players[0];
           if (other && dist(me, other) <= (game.rule.contactRange || 52)) {
             tone(300 + Math.min((game.mashCounts[1] || 0) + 1, 14) * 26, .05, 'triangle', .035, 1.08);
+            // Optimistic meter: bump locally for instant feedback; the next
+            // snapshot reconciles with the host's authoritative count.
+            game.mashCounts[1] = Math.min((game.mashCounts[1] || 0) + 1, game.rule.mashGoal);
+            updateRuleHud();
           }
         }
         onlinePendingSkill = true;
