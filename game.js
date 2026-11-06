@@ -2389,6 +2389,8 @@
         facingX: p.facingX,
         facingY: p.facingY,
         emotion: p.emotion,
+        impactLeft: p.impactLeft,
+        blink: p.blink,
         trap: p.trap ? { x: p.trap.x, y: p.trap.y, radius: p.trap.radius, left: p.trap.left, arm: p.trap.arm, stun: p.trap.stun } : null
       })),
       banner: { seq: game.bannerSeq, text: game.bannerText, time: game.bannerTime },
@@ -2515,6 +2517,8 @@
     p.castTotal = snap.castTotal;
     p.skillCooldown = snap.skillCooldown;
     p.emotion = snap.emotion;
+    p.impactLeft = snap.impactLeft || 0;
+    p.blink = snap.blink || 0;
     p.trap = snap.trap ? { ...snap.trap } : null;
     p.vx = snap.vx;
     p.vy = snap.vy;
