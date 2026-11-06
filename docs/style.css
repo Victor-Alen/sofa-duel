@@ -384,3 +384,6 @@ body.desktop-mode .help-body section{border-color:#2a3350}
   body.online-match .canvas-frame canvas{position:static;width:100%;height:auto;max-width:100%;aspect-ratio:16/9;transform:none}
   body:not(.in-match) .mobile-controls{display:none}
 }
+
+/* Compact online HUD on phones: it used to wrap char-by-char and cover the spawn area. */
+@media (max-width: 760px){.online-game-hud{gap:8px;padding:5px 10px;font-size:12px;top:8px;white-space:nowrap}.connection-status,.online-player-info{white-space:nowrap}}

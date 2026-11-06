@@ -116,13 +116,14 @@
     try { localStorage.setItem('sofa-duel-stats', JSON.stringify(game.stats)); } catch (_) {}
   }
 
-  function updateStats(winner) {
+  function updateStats(winner, localIndex = 0) {
+    const iWon = winner === localIndex;
     game.stats.matches++;
-    if (winner === 0) game.stats.wins++;
-    game.stats.totalScore += game.scores[winner];
-    game.stats.maxCombo = Math.max(game.stats.maxCombo, game.maxCombo[winner]);
+    if (iWon) game.stats.wins++;
+    game.stats.totalScore += game.scores[localIndex];
+    game.stats.maxCombo = Math.max(game.stats.maxCombo, game.maxCombo[localIndex]);
     const matchTime = game.round * ROUND_SECONDS + (ROUND_SECONDS - game.time);
-    if (winner === 0 && matchTime < game.stats.fastestWin) game.stats.fastestWin = matchTime;
+    if (iWon && matchTime < game.stats.fastestWin) game.stats.fastestWin = matchTime;
     checkAchievements();
     saveStats();
   }
@@ -2400,6 +2401,7 @@
     $('online-game-hud').hidden = true;
     $('again-btn').disabled = false;
     const iWon = winner === onlinePlayerNumber;
+    updateStats(winner, onlinePlayerNumber);  // guests earn achievements too
     const winnerCharacter = CHARACTERS[game.picks[winner]];
     if (!winnerCharacter) return;
     $('result-title').textContent = `${winnerCharacter.name}霸占沙发！`;
