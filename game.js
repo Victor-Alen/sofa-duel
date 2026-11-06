@@ -69,6 +69,7 @@
   });
   const game = { mode: 'cpu', difficulty: 'normal', lastCpuPick: null, phase: 'menu', manualPicks: ['dash', 'guard'], picks: ['dash', 'guard'], scores: [0, 0], capture: [0, 0], time: ROUND_SECONDS, seats: [], sofaCount: 1, matchSofas: 1, lastSeatLayout: '', rule: null, previousRule: null, ruleHistory: [], ruleTarget: null, ruleMove: null, rulePhase: 'idle', elapsed: 0, round: 0, tiedRounds: 0, wait: 0, bannerTime: 0, bannerSeq: 0, playTipTime: 0, bannerText: '', particles: [], shake: 0, hitStop: 0, paused: false, audio: true, audioContext: null, replay: null, highlightFrames: [], highlightClock: 0, lastImpact: null, standoff: false, combo: [0, 0], maxCombo: [0, 0], stats: loadStats(), music: null, musicGain: null, achievementQueue: [], currentAchievement: null };
   let last = performance.now();
+  let lastBumpAt = 0;  // throttle the body-squeeze thud
 
   function makePlayer(i) {
     return { i, characterId: i ? 'guard' : 'dash', x: i ? 740 : 220, y: 360, vx: 0, vy: 0, facingX: i ? -1 : 1, facingY: 0, dashLeft: 0, dashHit: false, shieldLeft: 0, shieldHit: false, pulseLeft: 0, pullLeft: 0, warpLeft: 0, reboundLeft: 0, reboundX: 0, reboundY: 0, reboundPower: 0, trap: null, skillCooldown: 0, stunned: 0, blink: 0, walk: 0, aiDecision: 0, wantsSkill: false, anim: i * 1.7, emotion: 'neutral', emotionLeft: 0, castLeft: 0, castTotal: .4, impactLeft: 0, celebrateLeft: 0 };
@@ -166,9 +167,21 @@
       if (ac.state === 'suspended') ac.resume();
       const gain = ac.createGain();
       gain.gain.setValueAtTime(0, ac.currentTime);
-      gain.gain.linearRampToValueAtTime(.018, ac.currentTime + 2);
+      gain.gain.linearRampToValueAtTime(.06, ac.currentTime + 1.2);
       gain.connect(ac.destination);
       game.musicGain = gain;
+      const playBass = (freq, startTime, duration) => {
+        const osc = ac.createOscillator();
+        const oscGain = ac.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(freq / 2, startTime);
+        oscGain.gain.setValueAtTime(.22, startTime);
+        oscGain.gain.exponentialRampToValueAtTime(.001, startTime + duration);
+        osc.connect(oscGain);
+        oscGain.connect(gain);
+        osc.start(startTime);
+        osc.stop(startTime + duration);
+      };
       const playChord = (freq, startTime, duration) => {
         const osc = ac.createOscillator();
         const oscGain = ac.createGain();
@@ -187,6 +200,7 @@
         if (!game.music) return;
         const now = ac.currentTime;
         const chord = chords[chordIndex % chords.length];
+        playBass(chord[0], now, 3.8);
         for (const freq of chord) playChord(freq, now, 3.8);
         chordIndex++;
         game.music = setTimeout(loopMusic, 4000);
@@ -1100,6 +1114,15 @@
     const overlap = (50 - d) / 2;
     a.x -= nx * overlap; a.y -= ny * overlap;
     b.x += nx * overlap; b.y += ny * overlap;
+    // Juice for plain body squeezes: thud + shake + sparkle only. Physics
+    // stay byte-identical to the authored collision (a per-frame correction
+    // cap here was tried and nerfed dashing hard, so it stays untouched).
+    if (overlap > 6 && performance.now() - lastBumpAt > 280) {
+      lastBumpAt = performance.now();
+      tone(150 + Math.random() * 40, .07, 'square', .04, .7);
+      game.shake = Math.max(game.shake, .09);
+      burst((a.x + b.x) / 2, (a.y + b.y) / 2 - 10, a.i, 5);
+    }
     const dashHits = [[a, b], [b, a]].filter(([attacker]) => attacker.dashLeft > 0 && !attacker.dashHit);
     for (const [attacker, victim] of dashHits) {
       attacker.dashHit = true;
