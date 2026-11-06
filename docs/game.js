@@ -1776,6 +1776,7 @@
   let onlineEchoTimestamp = 0;   // latest guest input timestamp, echoed by the host
   let onlineEchoAt = -Infinity;  // host-side arrival time of that input
   let onlineLastSnapshotAt = 0;  // guest-side: last time a host snapshot arrived
+  let onlineReconnectTimer = null; // host-side grace window for a dropped guest
   let remoteInterpolation = freshInterpolation();
 
   function freshInterpolation() {
@@ -1926,8 +1927,13 @@
       document.querySelector('.waiting-text').textContent = '把 6 位房间号发给好友，等待加入…';
       updateConnectionStatus('connected');
       session.onPlayerJoin = () => {
-        if (!isCurrentOnlineOperation(operation, session) || onlineState !== 'waiting') return;
+        if (!isCurrentOnlineOperation(operation, session)) return;
+        if (onlineState !== 'waiting' && onlineState !== 'select') return;
+        if (onlineReconnectTimer) { clearTimeout(onlineReconnectTimer); onlineReconnectTimer = null; }
         enterOnlineSelect();
+        // Publish the authoritative epoch so any guest (first join, refreshed
+        // page, or same-page rejoin) lands on the same counter.
+        network.send('lobby', { epoch: onlineLobbyEpoch });
       };
     } catch (error) {
       if (!isCurrentOnlineOperation(operation, session)) return;
@@ -1941,6 +1947,10 @@
       $('online-error').textContent = '请先输入好友发来的 6 位房间号';
       return;
     }
+    await joinRoomByCode(input);
+  }
+
+  async function joinRoomByCode(input) {
     const { operation, session } = prepareOnlineLobby();
     $('room-code').textContent = '------';
     document.querySelector('.waiting-text').textContent = '正在加入房间…';
@@ -1956,6 +1966,9 @@
       $('copy-code-btn').disabled = false;
       updateConnectionStatus('connected');
       enterOnlineSelect();
+      // Ask the host for its lobby epoch so reconnects (fresh page or same
+      // page) converge on the host's counter instead of lockstep increments.
+      network.send('hello', {});
     } catch (error) {
       if (!isCurrentOnlineOperation(operation, session)) return;
       leaveOnlineRoom(onlineErrorText(error, '加入房间失败，请重试'));
@@ -2391,6 +2404,19 @@
   function handleOnlineMessage(data) {
     if (!data || !data.type) return;
     switch (data.type) {
+      case 'hello':
+        // A (re)joining guest asks for the host's authoritative lobby epoch.
+        if (onlinePlayerNumber === 0 && onlineState === 'select' && onlineConnected()) {
+          network.send('lobby', { epoch: onlineLobbyEpoch });
+        }
+        break;
+      case 'lobby':
+        if (onlinePlayerNumber === 1 && onlineState === 'select' && Number.isInteger(data.epoch)
+            && data.epoch >= onlineLobbyEpoch) {
+          onlineLobbyEpoch = data.epoch;
+          updateOnlineLobby();
+        }
+        break;
       case 'characterSelect':
         if (onlineState !== 'select' || data.epoch !== onlineLobbyEpoch || !CHARACTERS[data.character]) return;
         if (onlineOpponentCharacter !== data.character) onlineOpponentReady = false;
@@ -2446,8 +2472,47 @@
 
   function handlePeerLeave() {
     if (!network) return;
+    // Unexpected drops get one reconnect path; intentional leaves tear the
+    // session down before this fires, so they never reach here.
+    if (onlinePlayerNumber === 0 && (onlineState === 'select' || onlineState === 'playing')) {
+      startHostReconnectWait();
+      return;
+    }
+    if (onlinePlayerNumber === 1 && (onlineState === 'select' || onlineState === 'playing')) {
+      startGuestRejoin();
+      return;
+    }
     const message = onlineState === 'playing' ? '对手已离开，本局结束' : '对手已断开连接';
     leaveOnlineRoom(message);
+  }
+
+  function startHostReconnectWait() {
+    stopOnlineLoop();
+    // Keep the room open on a fresh select screen; if the guest refreshes, it
+    // rejoins the same code and both sides re-select with a published epoch.
+    enterOnlineSelect();
+    document.querySelector('.select-hint').textContent = '对手已断开，等待重连…（20 秒后关闭房间）';
+    onlineReconnectTimer = setTimeout(() => {
+      onlineReconnectTimer = null;
+      if (onlineState === 'select' && !onlineConnected()) {
+        leaveOnlineRoom('对手未重新连接，房间已关闭');
+      }
+    }, 20000);
+  }
+
+  async function startGuestRejoin() {
+    const code = onlineRoomCode;
+    if (!code) { leaveOnlineRoom('连接已断开'); return; }
+    stopOnlineLoop();
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      if (onlineState === 'menu') return; // user already backed out
+      try {
+        await joinRoomByCode(code);
+        if (onlineConnected()) return; // reconnected; hello/lobby re-syncs the lobby
+      } catch (_) { /* fall through to the next attempt */ }
+      if (attempt < 3) await new Promise(r => setTimeout(r, 1500));
+    }
+    leaveOnlineRoom('与对手的连接已断开，请重新加入房间');
   }
 
   function stopOnlineLoop() {
@@ -2459,6 +2524,7 @@
 
   async function leaveOnlineRoom(message) {
     ++onlineOperation;
+    if (onlineReconnectTimer) { clearTimeout(onlineReconnectTimer); onlineReconnectTimer = null; }
     stopOnlineLoop();
     const oldNetwork = network;
     network = null;
