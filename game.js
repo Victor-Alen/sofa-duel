@@ -1697,12 +1697,14 @@
   }
 
   document.querySelectorAll('.mode').forEach(btn => btn.addEventListener('click', () => {
-    if (game.phase !== 'menu' && game.phase !== 'finished') return;
     if (game.mode === 'online' && btn.dataset.mode !== 'online') {
-      leaveOnlineRoom();
-      returnToMenu(btn.dataset.mode);
+      // The mode switch is an exit affordance: honor it even mid-match,
+      // otherwise a live online game offers no way out on some layouts.
+      const target = btn.dataset.mode;
+      (async () => { await leaveOnlineRoom('你已离开房间'); returnToMenu(target); })();
       return;
     }
+    if (game.phase !== 'menu' && game.phase !== 'finished') return;
     game.mode = btn.dataset.mode;
     syncMode();
     if (game.mode === 'online') showOnlineScreen();
@@ -2556,15 +2558,24 @@
     const code = onlineRoomCode;
     if (!code) { leaveOnlineRoom('连接已断开'); return; }
     stopOnlineLoop();
+    const operation = ++onlineOperation;  // user intent token for this rejoin
     for (let attempt = 1; attempt <= 3; attempt++) {
-      if (onlineState === 'menu') return; // user already backed out
+      if (onlineState === 'menu' || operation !== onlineOperation) return; // user backed out
       try {
         await joinRoomByCode(code);
+        if (operation !== onlineOperation || onlineState === 'menu') {
+          // The user left while this attempt was in flight and the join still
+          // succeeded: drop the room immediately or they would be yanked back
+          // into the lobby against their will.
+          const stale = network; network = null;
+          if (stale) { stale.onData = null; stale.onPlayerJoin = null; stale.onPlayerLeave = null; stale.leaveRoom().catch(() => {}); }
+          return;
+        }
         if (onlineConnected()) return; // reconnected; hello/lobby re-syncs the lobby
       } catch (_) { /* fall through to the next attempt */ }
       if (attempt < 3) await new Promise(r => setTimeout(r, 1500));
     }
-    leaveOnlineRoom('与对手的连接已断开，请重新加入房间');
+    if (operation === onlineOperation) leaveOnlineRoom('与对手的连接已断开，请重新加入房间');
   }
 
   function stopOnlineLoop() {
@@ -2642,6 +2653,10 @@
   $('create-room-btn').addEventListener('click', createRoom);
   $('join-room-btn').addEventListener('click', joinRoom);
   $('online-ready-btn').addEventListener('click', toggleOnlineReady);
+  $('online-leave-btn').addEventListener('click', () => {
+    if (onlineConnected()) network.send('leave', {});
+    leaveOnlineRoom('你已离开房间');
+  });
   $('room-code-input').addEventListener('keypress', e => {
     if (e.key === 'Enter') joinRoom();
   });

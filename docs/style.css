@@ -387,3 +387,7 @@ body.desktop-mode .help-body section{border-color:#2a3350}
 
 /* Compact online HUD on phones: it used to wrap char-by-char and cover the spawn area. */
 @media (max-width: 760px){.online-game-hud{gap:8px;padding:5px 10px;font-size:12px;top:8px;white-space:nowrap}.connection-status,.online-player-info{white-space:nowrap}}
+
+/* In-match exit for online games: the pause button is meaningless there. */
+.online-leave-btn{border:1px solid #e2b1a4;background:#fff3ec;color:#c4503a;font-family:inherit;font-weight:800;font-size:13px;padding:5px 12px;border-radius:14px;cursor:pointer}
+.online-leave-btn:hover{background:#ffe3d9}
