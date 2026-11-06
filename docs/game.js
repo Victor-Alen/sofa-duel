@@ -667,6 +667,12 @@
     $('dash-touch').classList.toggle('cooling', localPlayer.skillCooldown > 0);
     $('dash-touch').querySelector('small').textContent = localPlayer.skillCooldown > 0 ? `${localPlayer.skillCooldown.toFixed(1)}s` : '↗';
     $('status-label').textContent = game.paused ? '已暂停' : game.replay ? '高光回放' : game.phase === 'playing' ? '抢沙发中' : game.phase === 'countdown' ? '准备开战' : game.phase === 'roundEnd' ? '本回合结束' : game.mode === 'demo' ? '自动演示' : '先到 3 分获胜';
+    // Guest watchdog: the local timer keeps ticking between snapshots, so a
+    // silent host stall (locked screen, dropped network) must be visible.
+    if (game.mode === 'online' && onlinePlayerNumber === 1 && onlineState === 'playing'
+        && onlineLastSnapshotAt && performance.now() - onlineLastSnapshotAt > 3000) {
+      $('status-label').textContent = '对方网络不稳定…';
+    }
   }
 
   // All instructions live in one help dialog so the start screen and mobile layout stay clean.
@@ -1766,6 +1772,7 @@
   let networkLag = 0;
   let onlineEchoTimestamp = 0;   // latest guest input timestamp, echoed by the host
   let onlineEchoAt = -Infinity;  // host-side arrival time of that input
+  let onlineLastSnapshotAt = 0;  // guest-side: last time a host snapshot arrived
   let remoteInterpolation = freshInterpolation();
 
   function freshInterpolation() {
@@ -2120,6 +2127,7 @@
     game.playTipTime = 0;
     onlinePendingSkill = false;
     onlineLastBannerSeq = 0;
+    onlineLastSnapshotAt = 0;
     remoteInterpolation = freshInterpolation();
     clearHighlight();
     resetPlayers();
@@ -2410,6 +2418,7 @@
         break;
       case 'gameState':
         if (onlinePlayerNumber === 1 && onlineState === 'playing') {
+          onlineLastSnapshotAt = performance.now();
           // Prefer the echoed input timestamp: both sides use the guest clock, so
           // this measures true input->state latency without cross-device skew.
           if (data.state && Number.isFinite(data.state.echo)) networkLag = Math.max(0, Math.min(9999, Date.now() - data.state.echo));
@@ -2469,6 +2478,7 @@
     networkLag = 0;
     onlineEchoTimestamp = 0;
     onlineEchoAt = -Infinity;
+    onlineLastSnapshotAt = 0;
     keys.clear();
     stickEnd();
     clearHighlight();
