@@ -196,12 +196,26 @@
       };
       const chords = [[261.63, 329.63, 392], [293.66, 369.99, 440], [329.63, 415.30, 493.88], [349.23, 440, 523.25]];
       let chordIndex = 0;
+      const playPluck = (freq, startTime) => {
+        const osc = ac.createOscillator();
+        const oscGain = ac.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq * 2, startTime);
+        oscGain.gain.setValueAtTime(.12, startTime);
+        oscGain.gain.exponentialRampToValueAtTime(.001, startTime + .3);
+        osc.connect(oscGain);
+        oscGain.connect(gain);
+        osc.start(startTime);
+        osc.stop(startTime + .3);
+      };
       const loopMusic = () => {
         if (!game.music) return;
         const now = ac.currentTime;
         const chord = chords[chordIndex % chords.length];
         playBass(chord[0], now, 3.8);
         for (const freq of chord) playChord(freq, now, 3.8);
+        // light arpeggio pulse: one soft high note per second keeps the loop alive
+        for (let beat = 0; beat < 4; beat++) playPluck(chord[beat % chord.length], now + beat + .02);
         chordIndex++;
         game.music = setTimeout(loopMusic, 4000);
       };
