@@ -88,7 +88,7 @@
       const osc = ac.createOscillator(), gain = ac.createGain();
       osc.type = type; osc.frequency.setValueAtTime(frequency, ac.currentTime);
       osc.frequency.exponentialRampToValueAtTime(Math.max(30, frequency * slide), ac.currentTime + duration);
-      gain.gain.setValueAtTime(volume, ac.currentTime);
+      gain.gain.setValueAtTime(Math.min(1, volume * 2.5), ac.currentTime);
       gain.gain.exponentialRampToValueAtTime(.0001, ac.currentTime + duration);
       osc.connect(gain); gain.connect(ac.destination);
       osc.start(); osc.stop(ac.currentTime + duration);
@@ -170,7 +170,7 @@
       if (ac.state === 'suspended') ac.resume();
       const gain = ac.createGain();
       gain.gain.setValueAtTime(0, ac.currentTime);
-      gain.gain.linearRampToValueAtTime(.06, ac.currentTime + 1.2);
+      gain.gain.linearRampToValueAtTime(.14, ac.currentTime + 1.2);
       gain.connect(ac.destination);
       game.musicGain = gain;
       const playBass = (freq, startTime, duration) => {
@@ -178,7 +178,7 @@
         const oscGain = ac.createGain();
         osc.type = 'triangle';
         osc.frequency.setValueAtTime(freq / 2, startTime);
-        oscGain.gain.setValueAtTime(.22, startTime);
+        oscGain.gain.setValueAtTime(.3, startTime);
         oscGain.gain.exponentialRampToValueAtTime(.001, startTime + duration);
         osc.connect(oscGain);
         oscGain.connect(gain);
@@ -190,7 +190,7 @@
         const oscGain = ac.createGain();
         osc.type = 'sine';
         osc.frequency.setValueAtTime(freq, startTime);
-        oscGain.gain.setValueAtTime(.3, startTime);
+        oscGain.gain.setValueAtTime(.45, startTime);
         oscGain.gain.exponentialRampToValueAtTime(.001, startTime + duration);
         osc.connect(oscGain);
         oscGain.connect(gain);
@@ -204,7 +204,7 @@
         const oscGain = ac.createGain();
         osc.type = 'sine';
         osc.frequency.setValueAtTime(freq * 2, startTime);
-        oscGain.gain.setValueAtTime(.12, startTime);
+        oscGain.gain.setValueAtTime(.18, startTime);
         oscGain.gain.exponentialRampToValueAtTime(.001, startTime + .3);
         osc.connect(oscGain);
         oscGain.connect(gain);
@@ -809,7 +809,8 @@
       characterSound(victim, 'hit');
       hit = true;
     }
-    game.shake = .12;
+    game.shake = .18;
+    game.impactFlash = .14;
     tone(160, .13, 'square', .035, .75);
     // Sync the impact to the online guest: particles/shake/sound are local,
     // so without this the guest would feel none of the punch.
@@ -1824,6 +1825,12 @@
     }
     ctx.globalAlpha = 1;
     ctx.restore();
+    if (game.impactFlash > 0) {
+      // One-two punch of juice: a brief white flash over the whole arena.
+      ctx.fillStyle = `rgba(255, 246, 224, ${Math.min(.45, game.impactFlash * 3)})`;
+      ctx.fillRect(0, 0, W, H);
+      game.impactFlash = Math.max(0, game.impactFlash - .016);
+    }
     captureHighlight(now);
   }
 
@@ -2446,10 +2453,11 @@
     if (Array.isArray(state.impacts)) {
       for (const imp of state.impacts) {
         if (!imp || !Number.isFinite(imp.x) || !Number.isFinite(imp.y)) continue;
-        burst(imp.x, imp.y, imp.side, 16);
-        game.shake = Math.max(game.shake, .12);
+        burst(imp.x, imp.y, imp.side, 22);
+        game.shake = Math.max(game.shake, .18);
+        game.impactFlash = .14;
         tone(160, .13, 'square', .035, .75);
-        guestHitStop = .06;
+        guestHitStop = .08;
       }
     }
     game.capture = state.capture || game.capture;
