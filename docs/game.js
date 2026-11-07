@@ -414,7 +414,8 @@
       spring: '抢沙发，沙发把人弹飞了！',
       frenzy: '室友抢沙发，技能突然加速！',
       mash: '室友抢沙发，贴身角力开始了！',
-      morph: '室友抢沙发，沙发开始变形！'
+      morph: '室友抢沙发，沙发开始变形！',
+      chaos: '混沌模式：所有机制随机砸下来！'
     }[ruleId] || '';
     resetPlayers();
     const suddenDeath = game.scores[0] === WIN_SCORE - 1 && game.scores[1] === WIN_SCORE - 1;
@@ -455,7 +456,7 @@
     }
     syncMode();
     // Demo matches rotate the sofa count so the showcase shows off every layout.
-    game.matchSofas = game.mode === 'demo' ? 1 + Math.floor(Math.random() * 3) : game.sofaCount;
+    game.matchSofas = game.mode === 'demo' || game.mode === 'chaos' ? 1 + Math.floor(Math.random() * 3) : game.sofaCount;
     document.body.classList.toggle('multi-sofa', game.matchSofas > 1);
     game.scores = [0, 0];
     game.combo = [0, 0];
@@ -1371,6 +1372,27 @@
     for (let i = 0; i < players.length; i++) updatePlayer(players[i], dt, moves[i]);
     collide();
     updateTraps();
+    // 混沌模式: every 5-9 seconds the room rule mutates into a different one,
+    // so all sofa mechanics show up randomly within a single match.
+    if (game.mode === 'chaos') {
+      game.chaosTimer = (game.chaosTimer || 0) + dt;
+      if (!game.chaosNext) game.chaosNext = 5 + Math.random() * 4;
+      if (game.chaosTimer >= game.chaosNext) {
+        game.chaosTimer = 0;
+        game.chaosNext = 5 + Math.random() * 4;
+        const pool = RULE_IDS.filter(id => id !== (game.rule && game.rule.id));
+        const newId = pool[Math.floor(Math.random() * pool.length)];
+        game.rule = RULES[newId];
+        game.previousRule = newId;
+        game.rulePhase = (newId === 'frenzy' || newId === 'mash' || newId === 'morph') ? 'active' : 'idle';
+        game.elapsed = 0;
+        game.ruleMove = null;
+        game.ruleTarget = null;
+        showBanner(`机制突变：${RULES[newId].name}！`, 1.2);
+        tone(420 + Math.random() * 180, .18, 'sawtooth', .05, 1.2);
+        updateRuleHud();
+      }
+    }
     // With several sofas, two campers on separate seats would otherwise both fill up
     // at the same moment and the array order would decide the round. When the opponent
     // is lounging on a different sofa, progress freezes until someone breaks the standoff.
