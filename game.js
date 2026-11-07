@@ -170,14 +170,18 @@
       if (ac.state === 'suspended') ac.resume();
       const gain = ac.createGain();
       gain.gain.setValueAtTime(0, ac.currentTime);
-      gain.gain.linearRampToValueAtTime(.14, ac.currentTime + 1.2);
+      gain.gain.linearRampToValueAtTime(.28, ac.currentTime + 1.2);
       gain.connect(ac.destination);
       game.musicGain = gain;
+      // 每个角色自带音乐色：垫底波形与音高跟随本地角色，低音跟随对手角色。
+      const musicMe = CHARACTERS[game.picks[localPlayerIndex()]] || CHARACTERS[CHARACTER_IDS[0]];
+      const musicFoe = CHARACTERS[game.picks[1 - localPlayerIndex()]] || musicMe;
+      const transpose = musicMe.pitch || 1;
       const playBass = (freq, startTime, duration) => {
         const osc = ac.createOscillator();
         const oscGain = ac.createGain();
-        osc.type = 'triangle';
-        osc.frequency.setValueAtTime(freq / 2, startTime);
+        osc.type = musicFoe.wave || 'triangle';
+        osc.frequency.setValueAtTime(freq / 2 * (musicFoe.pitch || 1), startTime);
         oscGain.gain.setValueAtTime(.3, startTime);
         oscGain.gain.exponentialRampToValueAtTime(.001, startTime + duration);
         osc.connect(oscGain);
@@ -188,7 +192,7 @@
       const playChord = (freq, startTime, duration) => {
         const osc = ac.createOscillator();
         const oscGain = ac.createGain();
-        osc.type = 'sine';
+        osc.type = musicMe.wave || 'sine';
         osc.frequency.setValueAtTime(freq, startTime);
         oscGain.gain.setValueAtTime(.45, startTime);
         oscGain.gain.exponentialRampToValueAtTime(.001, startTime + duration);
@@ -202,7 +206,7 @@
       const playPluck = (freq, startTime) => {
         const osc = ac.createOscillator();
         const oscGain = ac.createGain();
-        osc.type = 'sine';
+        osc.type = musicMe.wave || 'sine';
         osc.frequency.setValueAtTime(freq * 2, startTime);
         oscGain.gain.setValueAtTime(.18, startTime);
         oscGain.gain.exponentialRampToValueAtTime(.001, startTime + .3);
@@ -214,7 +218,7 @@
       const loopMusic = () => {
         if (!game.music) return;
         const now = ac.currentTime;
-        const chord = chords[chordIndex % chords.length];
+        const chord = chords[chordIndex % chords.length].map(f => f * transpose);
         playBass(chord[0], now, 3.8);
         for (const freq of chord) playChord(freq, now, 3.8);
         // light arpeggio pulse: one soft high note per second keeps the loop alive
@@ -225,6 +229,10 @@
         const interval = heat >= 3 ? 3200 : heat >= 2 ? 3600 : 4000;
         game.music = setTimeout(loopMusic, interval);
       };
+      // CRITICAL: arm the loop BEFORE the first call — the guard inside reads
+      // game.music, and the old code only assigned it after that guard, so the
+      // very first invocation returned immediately and music NEVER started.
+      game.music = 'playing';
       loopMusic();
     } catch (_) { game.music = null; }
   }
@@ -1371,6 +1379,20 @@
     for (const p of casts) useSkill(p, true);
     for (let i = 0; i < players.length; i++) updatePlayer(players[i], dt, moves[i]);
     collide();
+    // 贴身角力: the AI mashes at a human-random pace when in contact, scaled
+    // by the chosen difficulty (easy = leisurely, hard = relentless).
+    if (game.rule && game.rule.id === 'mash' && game.rulePhase === 'active') {
+      for (const p of players) {
+        const isAi = game.mode === 'demo' || (p.i === 1 && (game.mode === 'cpu' || game.mode === 'chaos'));
+        if (!isAi) continue;
+        const other = players[1 - p.i];
+        if (!other || dist(p, other) > (game.rule.contactRange || 52)) { p.mashTimer = 0; continue; }
+        p.mashTimer = (p.mashTimer || 0) + dt;
+        const tapsPerSec = game.difficulty === 'hard' ? 4.5 : game.difficulty === 'easy' ? 1.5 : 2.7;
+        const pace = 1 / (tapsPerSec * (0.75 + Math.random() * 0.5));
+        if (p.mashTimer >= pace) { p.mashTimer = 0; registerMash(p); }
+      }
+    }
     updateTraps();
     // 混沌模式: every 5-9 seconds the room rule mutates into a different one,
     // so all sofa mechanics show up randomly within a single match.
@@ -2964,6 +2986,7 @@
           bounds: playArea(), interpolationDuration: remoteInterpolation.interpDuration,
           seats: game.seats.map(seat => ({ x: seat.x, y: seat.y, capture: [...seat.capture], scale: seat.scale || 1 })),
           morphT: game.morphT || 0, morphPhase: game.morphPhase, rulePhase: game.rulePhase,
+          musicActive: Boolean(game.music),
           players: players.map(p => ({ x: p.x, y: p.y, cooldown: p.skillCooldown, characterId: p.characterId })),
           opponentInput: { ...onlineOpponentInput }
         };
