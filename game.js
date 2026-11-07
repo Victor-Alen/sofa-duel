@@ -2852,9 +2852,14 @@
   $('room-code-input').addEventListener('keypress', e => {
     if (e.key === 'Enter') joinRoom();
   });
+  function inviteText() {
+    // A shareable invite: code + deep link, so friends can join in two taps.
+    const link = location.origin + location.pathname;
+    return `来和我抢沙发！房间号 ${onlineRoomCode}\n${link}`;
+  }
   $('copy-code-btn').addEventListener('click', () => {
     if (!onlineRoomCode) return;
-    navigator.clipboard.writeText(onlineRoomCode).then(() => {
+    navigator.clipboard.writeText(inviteText()).then(() => {
       const btn = $('copy-code-btn');
       btn.textContent = '✓';
       btn.classList.add('copied');
@@ -2865,7 +2870,7 @@
     }).catch(() => {
       // Fallback for older browsers
       const textArea = document.createElement('textarea');
-      textArea.value = onlineRoomCode;
+      textArea.value = inviteText();
       document.body.appendChild(textArea);
       textArea.select();
       document.execCommand('copy');
