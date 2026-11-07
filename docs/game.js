@@ -2973,9 +2973,14 @@
     const link = location.origin + location.pathname;
     return `来和我抢沙发！房间号 ${onlineRoomCode}\n${link}`;
   }
-  $('copy-code-btn').addEventListener('click', () => {
+  $('copy-code-btn').addEventListener('click', async () => {
     if (!onlineRoomCode) return;
-    navigator.clipboard.writeText(inviteText()).then(() => {
+    const invite = inviteText();
+    // On phones, jump straight to the native share sheet; desktop keeps the clipboard.
+    if (navigator.share) {
+      try { await navigator.share({ title: '沙发只能坐一个', text: invite }); return; } catch (error) { if (error && error.name === 'AbortError') return; }
+    }
+    navigator.clipboard.writeText(invite).then(() => {
       const btn = $('copy-code-btn');
       btn.textContent = '✓';
       btn.classList.add('copied');
