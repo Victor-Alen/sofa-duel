@@ -1421,6 +1421,7 @@
         const newId = pool[Math.floor(Math.random() * pool.length)];
         game.rule = RULES[newId];
         game.previousRule = newId;
+        game.ruleHistory.push(newId);
         game.rulePhase = (newId === 'frenzy' || newId === 'mash' || newId === 'morph') ? 'active' : 'idle';
         game.elapsed = 0;
         game.ruleMove = null;
