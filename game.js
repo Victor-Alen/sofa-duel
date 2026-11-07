@@ -569,6 +569,17 @@
     const diffSelector = $('difficulty-selector');
     if (diffSelector) diffSelector.hidden = game.mode !== 'cpu';
     renderPickers();
+    // Career strip: a little "one more game" pull from the saved stats.
+    const strip = $('stats-strip');
+    if (strip) {
+      const s = game.stats;
+      if (s && s.matches > 0) {
+        strip.textContent = `已玩 ${s.matches} 局 · 胜 ${s.wins} · 最高连击 ${s.maxCombo || 0}${s.achievements && s.achievements.length ? ' · 成就 ' + s.achievements.length : ''}`;
+        strip.hidden = false;
+      } else {
+        strip.hidden = true;
+      }
+    }
   }
 
   function renderPickers() {
