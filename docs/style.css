@@ -414,3 +414,13 @@ body.desktop-mode .help-body section{border-color:#2a3350}
 .howto h3{margin:0 0 8px;font-size:15px;color:#a4552f}
 .howto p{margin:4px 0;font-size:13.5px;font-weight:600;color:#6d5c4e}
 .howto .primary-btn{width:100%;margin-top:8px}
+
+/* Sound settings */
+.audio-settings-btn{display:block;width:100%;margin-top:8px;padding:8px;background:transparent;border:1.5px dashed #d9c2ae;border-radius:12px;color:#8a7666;font-weight:700;font-size:13px;cursor:pointer}
+.audio-settings-btn:hover{background:#fbf2e9}
+.audio-toggle{margin:6px 0;background:#fdeee1;color:#7c5a41}
+.audio-toggle.off{background:#eee4da;color:#a4978a;text-decoration:line-through}
+.ghost-btn{padding:8px 18px;border:none;background:transparent;color:#8a7666;font-weight:700;cursor:pointer}
+#audio-dialog{border:none;border-radius:16px;padding:18px 20px;text-align:center}
+#audio-dialog::backdrop{background:#2a201a66}
+#audio-dialog h3{margin:0 0 10px;color:#7c5a41}

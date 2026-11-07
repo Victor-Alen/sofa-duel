@@ -69,6 +69,9 @@
     frame.width = 480; frame.height = 270;
     return frame;
   });
+  let musicOn = true;
+  let sfxOn = true;
+  try { musicOn = localStorage.getItem('sofa-duel-audio-music') !== 'off'; sfxOn = localStorage.getItem('sofa-duel-audio-sfx') !== 'off'; } catch (_) {}
   const game = { mode: 'cpu', difficulty: 'normal', lastCpuPick: null, phase: 'menu', manualPicks: ['dash', 'guard'], picks: ['dash', 'guard'], scores: [0, 0], capture: [0, 0], time: ROUND_SECONDS, seats: [], sofaCount: 1, matchSofas: 1, lastSeatLayout: '', rule: null, previousRule: null, ruleHistory: [], ruleTarget: null, ruleMove: null, rulePhase: 'idle', elapsed: 0, round: 0, tiedRounds: 0, wait: 0, bannerTime: 0, bannerSeq: 0, playTipTime: 0, bannerText: '', particles: [], shake: 0, hitStop: 0, paused: false, audio: (() => { try { return localStorage.getItem('sofa-duel-audio') !== 'off'; } catch (_) { return true; } })(), audioContext: null, replay: null, highlightFrames: [], highlightClock: 0, lastImpact: null, standoff: false, combo: [0, 0], maxCombo: [0, 0], mashCounts: [0, 0], stats: loadStats(), music: null, musicGain: null, achievementQueue: [], currentAchievement: null };
   let last = performance.now();
   let lastBumpAt = 0;  // throttle the body-squeeze thud
@@ -79,6 +82,7 @@
   }
 
   function tone(frequency = 440, duration = .09, type = 'sine', volume = .055, slide = 1) {
+    if (!sfxOn) return;
     if (!game.audio) return;
     try {
       const AC = window.AudioContext || window.webkitAudioContext;
@@ -162,7 +166,7 @@
   }
 
   function startBackgroundMusic() {
-    if (!game.audio || game.music) return;
+    if (!game.audio || !musicOn || game.music) return;
     try {
       const AC = window.AudioContext || window.webkitAudioContext;
       if (!AC) return;
@@ -1971,6 +1975,29 @@
   $('help-dialog').addEventListener('click', event => { if (event.target === $('help-dialog')) $('help-dialog').close(); });
   $('skip-replay').addEventListener('click', skipReplay);
   canvas.addEventListener('pointerdown', () => { if (game.replay) skipReplay(); });
+  const refreshAudioSettings = () => {
+    const musicBtn = $('toggle-music-btn');
+    const sfxBtn = $('toggle-sfx-btn');
+    if (musicBtn) { musicBtn.textContent = `背景音乐：${musicOn ? '开' : '关'}`; musicBtn.classList.toggle('off', !musicOn); }
+    if (sfxBtn) { sfxBtn.textContent = `碰撞音效：${sfxOn ? '开' : '关'}`; sfxBtn.classList.toggle('off', !sfxOn); }
+  };
+  $('audio-settings-btn')?.addEventListener('click', () => { refreshAudioSettings(); $('audio-dialog').showModal(); });
+  $('toggle-music-btn')?.addEventListener('click', () => {
+    musicOn = !musicOn;
+    try { localStorage.setItem('sofa-duel-audio-music', musicOn ? 'on' : 'off'); } catch (_) {}
+    if (!musicOn) stopBackgroundMusic();
+    else if (document.body.classList.contains('in-match') && !game.paused && game.audio) startBackgroundMusic();
+    refreshAudioSettings();
+    if (sfxOn) tone(560, .08);
+  });
+  $('toggle-sfx-btn')?.addEventListener('click', () => {
+    sfxOn = !sfxOn;
+    try { localStorage.setItem('sofa-duel-audio-sfx', sfxOn ? 'on' : 'off'); } catch (_) {}
+    refreshAudioSettings();
+    if (sfxOn) tone(620, .08);
+  });
+  $('audio-close-btn')?.addEventListener('click', () => $('audio-dialog').close());
+  $('audio-dialog')?.addEventListener('click', event => { if (event.target === $('audio-dialog')) $('audio-dialog').close(); });
   $('sound-btn').addEventListener('click', () => {
     game.audio = !game.audio;
     $('sound-btn').textContent = game.audio ? '♪' : '×';
