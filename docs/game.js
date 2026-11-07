@@ -441,7 +441,7 @@
         picks[j] = picked;
       }
       game.picks = picks.slice(0, 2);
-    } else if (game.mode === 'cpu') {
+    } else if (game.mode === 'cpu' || game.mode === 'chaos') {
       const candidates = CHARACTER_IDS.filter(id => id !== game.manualPicks[0]);
       // Avoid handing the CPU the same character two matches in a row when possible,
       // so players don't keep facing the same skill (e.g. 冲撞) repeatedly.
@@ -465,6 +465,7 @@
     game.ruleHistory = [];
     game.mashCounts = [0, 0];
     game.morphT = 0; game.morphPhase = -1;
+    game.chaosTimer = 0; game.chaosNext = 0;
     game.morphT = 0; game.morphPhase = -1;
     game.previousRule = null;
     game.lastSeatLayout = '';
@@ -541,13 +542,13 @@
 
   function syncMode() {
     document.querySelectorAll('.mode').forEach(btn => btn.classList.toggle('active', btn.dataset.mode === game.mode));
-    const waitingForOpponent = game.mode === 'cpu' && !document.body.classList.contains('in-match');
-    $('start-btn').firstChild.textContent = game.mode === 'demo' ? '开始观看演示 ' : game.mode === 'online' ? '进入联网模式 ' : '开始抢沙发 ';
+    const waitingForOpponent = (game.mode === 'cpu' || game.mode === 'chaos') && !document.body.classList.contains('in-match');
+    $('start-btn').firstChild.textContent = game.mode === 'demo' ? '开始观看演示 ' : game.mode === 'online' ? '进入联网模式 ' : game.mode === 'chaos' ? '开始混沌抢沙发 ' : '开始抢沙发 ';
     const local = localPlayerIndex();
     // Never dereference a partial network pick array while a lobby/match transition is rendering.
     const displayed = [0, 1].map(i => CHARACTERS[game.picks[i]] || CHARACTERS[game.manualPicks[i]] || CHARACTERS[CHARACTER_IDS[i]] || CHARACTERS[CHARACTER_IDS[0]]);
     $('player-a-label').textContent = game.mode === 'online' ? `${local === 0 ? '你' : '对手'}·${displayed[0].name}` : `${game.mode === 'demo' ? '电脑' : '玩家一'}·${displayed[0].name}`;
-    $('player-b-label').textContent = waitingForOpponent ? '随机对手' : game.mode === 'online' ? `${local === 1 ? '你' : '对手'}·${displayed[1].name}` : `${game.mode === 'demo' || game.mode === 'cpu' ? '电脑' : '玩家二'}·${displayed[1].name}`;
+    $('player-b-label').textContent = waitingForOpponent ? '随机对手' : game.mode === 'online' ? `${local === 1 ? '你' : '对手'}·${displayed[1].name}` : `${game.mode === 'demo' || game.mode === 'cpu' || game.mode === 'chaos' ? '电脑' : '玩家二'}·${displayed[1].name}`;
     const enemySkill = displayed[1].skill;
     $('player-b-label').title = waitingForOpponent ? '本局对手角色随机' : `技能：${enemySkill.name} · ${enemySkill.description}`;
     for (let i = 0; i < 2; i++) {
@@ -567,7 +568,7 @@
     $('picker-b-row').hidden = game.mode !== 'duo';
     document.querySelector('.pickers').hidden = game.mode === 'demo' || game.mode === 'online';
     const diffSelector = $('difficulty-selector');
-    if (diffSelector) diffSelector.hidden = game.mode !== 'cpu';
+    if (diffSelector) diffSelector.hidden = !(game.mode === 'cpu' || game.mode === 'chaos');
     renderPickers();
     // Career strip: a little "one more game" pull from the saved stats.
     const strip = $('stats-strip');
@@ -627,6 +628,7 @@
     game.ruleHistory = [];
     game.mashCounts = [0, 0];
     game.morphT = 0; game.morphPhase = -1;
+    game.chaosTimer = 0; game.chaosNext = 0;
     game.morphT = 0; game.morphPhase = -1;
     game.ruleTarget = null;
     game.ruleMove = null;
@@ -881,7 +883,7 @@
   };
 
   function isAiPlayer(p) {
-    return game.mode === 'demo' || (p.i === 1 && game.mode === 'cpu');
+    return game.mode === 'demo' || (p.i === 1 && (game.mode === 'cpu' || game.mode === 'chaos'));
   }
 
   // AI uses skills on a longer cooldown on lower difficulties, giving players more breathing room.
@@ -1032,7 +1034,7 @@
 
   function inputFor(p, dt) {
     p.wantsSkill = false;
-    if (game.mode === 'demo' || (p.i === 1 && game.mode === 'cpu')) {
+    if (game.mode === 'demo' || (p.i === 1 && (game.mode === 'cpu' || game.mode === 'chaos'))) {
       const other = players[1 - p.i];
       const skill = CHARACTERS[p.characterId].skill;
       const enemyDistance = dist(p, other);
@@ -2345,6 +2347,7 @@
     game.ruleHistory = [];
     game.mashCounts = [0, 0];
     game.morphT = 0; game.morphPhase = -1;
+    game.chaosTimer = 0; game.chaosNext = 0;
     game.morphT = 0; game.morphPhase = -1;
     game.rule = null;
     game.rulePhase = 'idle';
