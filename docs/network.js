@@ -102,12 +102,12 @@
       });
     }
 
-    async createRoom() {
+    async createRoom(preferredCode) {
       await this.loadPeerJS();
       this.playerNumber = 0;
       let lastError = null;
       for (let attempt = 0; attempt < 3; attempt++) {
-        const code = this.generateRoomCode();
+        const code = preferredCode || this.generateRoomCode();
         try {
           await this.openPeer('sofa-' + code);
           this.roomCode = code;

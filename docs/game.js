@@ -2120,12 +2120,13 @@
     return operation === onlineOperation && network === session;
   }
 
-  async function createRoom() {
+  async function createRoom(preferredCode) {
+    if (typeof preferredCode !== 'string' || preferredCode.length !== 6) preferredCode = undefined;  // click events etc.
     const { operation, session } = prepareOnlineLobby();
-    $('room-code').textContent = '------';
-    document.querySelector('.waiting-text').textContent = '正在创建房间…';
+    $('room-code').textContent = preferredCode || '------';
+    document.querySelector('.waiting-text').textContent = preferredCode ? '正在恢复房间…' : '正在创建房间…';
     try {
-      const result = await session.createRoom();
+      const result = await session.createRoom(preferredCode);
       if (!isCurrentOnlineOperation(operation, session)) {
         await session.leaveRoom();
         return;
@@ -2134,7 +2135,8 @@
       onlinePlayerNumber = result.playerNumber;
       $('room-code').textContent = onlineRoomCode;
       $('copy-code-btn').disabled = false;
-      document.querySelector('.waiting-text').textContent = '把 6 位房间号发给好友，等待加入…';
+      document.querySelector('.waiting-text').textContent = preferredCode ? '房间已恢复，等待对手重连…' : '把 6 位房间号发给好友，等待加入…';
+      try { sessionStorage.setItem('sofa-host-room', onlineRoomCode); } catch (_) {}
       updateConnectionStatus('connected');
       session.onPlayerJoin = () => {
         if (!isCurrentOnlineOperation(operation, session)) return;
@@ -2749,7 +2751,7 @@
     if (!code) { leaveOnlineRoom('连接已断开'); return; }
     stopOnlineLoop();
     const operation = ++onlineOperation;  // user intent token for this rejoin
-    for (let attempt = 1; attempt <= 3; attempt++) {
+    for (let attempt = 1; attempt <= 6; attempt++) {
       if (onlineState === 'menu' || operation !== onlineOperation) return; // user backed out
       try {
         await joinRoomByCode(code);
@@ -2763,7 +2765,7 @@
         }
         if (onlineConnected()) return; // reconnected; hello/lobby re-syncs the lobby
       } catch (_) { /* fall through to the next attempt */ }
-      if (attempt < 3) await new Promise(r => setTimeout(r, 1500));
+      if (attempt < 6) await new Promise(r => setTimeout(r, 1500));
     }
     if (operation === onlineOperation) leaveOnlineRoom('与对手的连接已断开，请重新加入房间');
   }
@@ -2788,6 +2790,7 @@
     }
     onlinePlayerNumber = null;
     onlineRoomCode = null;
+    try { sessionStorage.removeItem('sofa-host-room'); } catch (_) {}
     onlineMyCharacter = null;
     onlineOpponentCharacter = null;
     onlineMyReady = false;
@@ -2842,7 +2845,7 @@
   });
 
   // Online button event listeners
-  $('create-room-btn').addEventListener('click', createRoom);
+  $('create-room-btn').addEventListener('click', () => createRoom());
   $('join-room-btn').addEventListener('click', joinRoom);
   $('online-ready-btn').addEventListener('click', toggleOnlineReady);
   $('online-leave-btn').addEventListener('click', () => {
@@ -2889,6 +2892,17 @@
   syncMode();
   resetPlayers();
   updateHud();
+
+  // Host refresh recovery: reopening the page reopens the same room, so a
+  // refresh no longer kills the match for both players. The guest rejoin
+  // loop (20s grace on their side) will find this room again.
+  try {
+    const savedHostRoom = sessionStorage.getItem('sofa-host-room');
+    if (savedHostRoom) {
+      showOnlineScreen('检测到上次的房间，正在恢复…');
+      createRoom(savedHostRoom).catch(() => {});
+    }
+  } catch (_) {}
   if (new URLSearchParams(location.search).get('record') === '1') {
     game.mode = 'demo';
     document.body.classList.add('record-mode');
