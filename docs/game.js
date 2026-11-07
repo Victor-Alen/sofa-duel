@@ -481,6 +481,7 @@
     game.mashCounts = [0, 0];
     game.morphT = 0; game.morphPhase = -1;
     game.chaosTimer = 0; game.chaosNext = 0;
+    game.mashWins = [0, 0];
     game.morphT = 0; game.morphPhase = -1;
     game.previousRule = null;
     game.lastSeatLayout = '';
@@ -550,6 +551,11 @@
     $('result-title').textContent = `${CHARACTERS[game.picks[winner]].name}霸占沙发！`;
     $('result-subtitle').textContent = game.mode === 'demo' ? '自动演示即将重新开始。' : winner === localWinner ? '这张沙发，今晚归你。' : game.mode === 'online' ? '惜败！点“再来一局”马上重赛。' : '再抢一次？';
     $('result-rule').textContent = `最近规则：${game.ruleHistory.slice(-3).map(id => RULES[id].name).join(' → ')}`;
+    const statsEl = $('result-stats');
+    if (statsEl) {
+      const best = Math.max(game.maxCombo[0], game.maxCombo[1]);
+      statsEl.textContent = `本局之最：最高连击 ×${best}${game.mashWins ? ' · 角力 ' + (game.mashWins[0] + game.mashWins[1]) + ' 胜' : ''}`;
+    }
     $('result-icon').textContent = winner === localWinner ? '🏆' : '🛋️';
     $('result-screen').classList.add('visible');
     if (game.mode === 'demo') game.wait = 3.5;
@@ -644,6 +650,7 @@
     game.mashCounts = [0, 0];
     game.morphT = 0; game.morphPhase = -1;
     game.chaosTimer = 0; game.chaosNext = 0;
+    game.mashWins = [0, 0];
     game.morphT = 0; game.morphPhase = -1;
     game.ruleTarget = null;
     game.ruleMove = null;
@@ -985,6 +992,8 @@
       // 手速奖励：领先越多，把对手撞得越远（撞到墙为止）。
       const lead = Math.max(0, game.mashCounts[p.i] - game.mashCounts[1 - p.i]);
       game.mashCounts = [0, 0];
+      game.mashWins = game.mashWins || [0, 0];
+      game.mashWins[p.i]++;
       pushAway(p, other, 420 + lead * 130, .32);
       scorePoint(p.i, 'mash');
       // Victory arpeggio: a rising three-note confirm on top of the score sounds.
@@ -2439,6 +2448,7 @@
     game.mashCounts = [0, 0];
     game.morphT = 0; game.morphPhase = -1;
     game.chaosTimer = 0; game.chaosNext = 0;
+    game.mashWins = [0, 0];
     game.morphT = 0; game.morphPhase = -1;
     game.rule = null;
     game.rulePhase = 'idle';
