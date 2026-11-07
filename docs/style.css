@@ -424,3 +424,5 @@ body.desktop-mode .help-body section{border-color:#2a3350}
 #audio-dialog{border:none;border-radius:16px;padding:18px 20px;text-align:center}
 #audio-dialog::backdrop{background:#2a201a66}
 #audio-dialog h3{margin:0 0 10px;color:#7c5a41}
+
+.match-stats{margin:2px 0 0;font-weight:700;color:#9c6b45;font-size:14px}
