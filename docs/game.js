@@ -1910,9 +1910,27 @@
   $('start-btn').addEventListener('click', () => {
     if (game.mode === 'online') {
       showOnlineScreen();
-    } else {
-      startMatch();
+      return;
     }
+    // First-time players get a 3-step primer; demo/bench skip it.
+    if (game.mode !== 'demo' && new URLSearchParams(location.search).get('bench') !== '1') {
+      let seen = true;
+      try { seen = localStorage.getItem('sofa-duel-seen') === '1'; } catch (_) {}
+      const howto = $('howto');
+      if (!seen && howto && !howto.dataset.done) {
+        howto.hidden = false;
+        howto.dataset.done = '1';
+        return;
+      }
+    }
+    startMatch();
+  });
+  const howtoOk = $('howto-ok-btn');
+  if (howtoOk) howtoOk.addEventListener('click', () => {
+    const h = $('howto');
+    if (h) h.hidden = true;
+    try { localStorage.setItem('sofa-duel-seen', '1'); } catch (_) {}
+    startMatch();
   });
   $('again-btn').addEventListener('click', () => game.mode === 'online' ? requestOnlineRematch() : startMatch());
   $('change-btn').addEventListener('click', () => game.mode === 'online' ? backToOnlineSelect(true) : returnToMenu(game.mode));
