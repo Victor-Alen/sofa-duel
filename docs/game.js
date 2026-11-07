@@ -226,7 +226,9 @@
         chordIndex++;
         // Dynamic tempo: the hotter the combo, the faster the loop drives the room.
         const heat = Math.max(game.combo[0], game.combo[1]);
-        const interval = heat >= 3 ? 3200 : heat >= 2 ? 3600 : 4000;
+        // 决胜分 (2:2): the loop itself gets urgent.
+        const suddenDeathMusic = game.scores[0] === WIN_SCORE - 1 && game.scores[1] === WIN_SCORE - 1;
+        const interval = suddenDeathMusic ? 3000 : heat >= 3 ? 3200 : heat >= 2 ? 3600 : 4000;
         game.music = setTimeout(loopMusic, interval);
       };
       // CRITICAL: arm the loop BEFORE the first call — the guard inside reads

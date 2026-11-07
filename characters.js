@@ -10,7 +10,7 @@
     guard: {
       id: 'guard', name: '蓝蓝', color: '#76b5eb', dark: '#428bc8', light: '#b1d5ee',
       speed: 205, ears: 'round', pitch: 520, wave: 'sine', personality: '笑眯眯，但绝不让座',
-      skill: { kind: 'shield', name: '护盾', description: '挡住冲撞、震波或弹簧', cooldown: 2.6, duration: 1, counterPower: 650 }
+      skill: { kind: 'shield', name: '护盾', description: '挡住冲撞、震波或弹簧', cooldown: 2.45, duration: 1, counterPower: 650 }
     },
     pulse: {
       id: 'pulse', name: '团团', color: '#83c996', dark: '#4f9b70', light: '#b7e3bf',
