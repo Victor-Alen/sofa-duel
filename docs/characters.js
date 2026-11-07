@@ -25,12 +25,12 @@
     magnet: {
       id: 'magnet', name: '柚柚', color: '#ae91df', dark: '#7b61b5', light: '#d7c4f0',
       speed: 190, ears: 'round', pitch: 280, wave: 'sine', personality: '慢慢靠近，一下子控场',
-      skill: { kind: 'pull', name: '引力', description: '牵引对手片刻，再将其弹开', cooldown: 3.1, radius: 185, power: 650, stun: .55, rebound: .18, reboundPower: 560 }
+      skill: { kind: 'pull', name: '引力', description: '牵引对手片刻，再将其弹开', cooldown: 3.1, radius: 185, power: 610, stun: .5, rebound: .18, reboundPower: 560 }
     },
     trap: {
       id: 'trap', name: '米米', color: '#ed9fb5', dark: '#bd6987', light: '#f7c9d7',
       speed: 200, ears: 'leaf', pitch: 580, wave: 'triangle', personality: '抱枕比本人更有主意',
-      skill: { kind: 'trap', name: '抱枕阵', description: '留下抱枕，困住踩到的对手', cooldown: 3.2, duration: 3.5, arm: .45, radius: 50, stun: 1.1 }
+      skill: { kind: 'trap', name: '抱枕阵', description: '留下抱枕，困住踩到的对手', cooldown: 3.2, duration: 3.2, arm: .45, radius: 50, stun: 1.0 }
     }
   };
   for (const character of Object.values(roster)) {
