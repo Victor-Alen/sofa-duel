@@ -809,7 +809,6 @@
     const dy = distance > 1 ? (victim.y - attacker.y) / distance : attacker.facingY;
     let hit = false;
     if (victim.shieldLeft > 0 && !victim.shieldHit) {
-      victim.shieldLeft = 0;
       victim.shieldHit = true;
       attacker.dashLeft = 0;
       attacker.stunned = Math.max(attacker.stunned, .3);
@@ -961,7 +960,6 @@
         const distance = dist(p, seat);
         if (distance > rule.radius) continue;
         if (p.shieldLeft > 0 && !p.shieldHit) {
-          p.shieldLeft = 0;
           p.shieldHit = true;
           react(p, 'smug', .75);
           characterSound(p, 'block');
@@ -1210,6 +1208,8 @@
   function updatePlayer(p, dt, move) {
     p.skillCooldown = Math.max(0, p.skillCooldown - dt);
     p.shieldLeft = Math.max(0, p.shieldLeft - dt);
+    // Reset shield hit flag each frame so shield can block multiple attacks during its duration
+    if (p.shieldLeft > 0) p.shieldHit = false;
     p.pulseLeft = Math.max(0, p.pulseLeft - dt);
     p.pullLeft = Math.max(0, p.pullLeft - dt);
     p.warpLeft = Math.max(0, p.warpLeft - dt);
@@ -1302,7 +1302,6 @@
       const victim = players[1 - owner.i];
       if (dist(victim, trap) > trap.radius) continue;
       if (victim.shieldLeft > 0 && !victim.shieldHit) {
-        victim.shieldLeft = 0;
         victim.shieldHit = true;
         react(victim, 'smug', .8);
         game.lastImpact = { side: victim.i, kind: 'shield', time: game.time };
