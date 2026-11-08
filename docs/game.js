@@ -171,7 +171,13 @@
       const AC = window.AudioContext || window.webkitAudioContext;
       if (!AC) return;
       const ac = game.audioContext || (game.audioContext = new AC());
-      if (ac.state === 'suspended') ac.resume();
+      // Resume audio context on user interaction (browser autoplay policy)
+      if (ac.state === 'suspended') {
+        ac.resume().then(() => {
+          if (ac.state === 'running') startBackgroundMusic();
+        });
+        return;
+      }
       const gain = ac.createGain();
       gain.gain.setValueAtTime(0, ac.currentTime);
       gain.gain.linearRampToValueAtTime(.28, ac.currentTime + 1.2);
@@ -808,34 +814,37 @@
       attacker.dashLeft = 0;
       attacker.stunned = Math.max(attacker.stunned, .3);
       attacker.blink = .42;
-      attacker.impactLeft = .28;
+      attacker.impactLeft = .32;
       attacker.vx = -dx * CHARACTERS[victim.characterId].skill.counterPower;
       attacker.vy = -dy * CHARACTERS[victim.characterId].skill.counterPower;
       react(victim, 'smug', .9);
       react(attacker, 'surprised', .5);
-      burst(victim.x, victim.y - 15, victim.i, 18);
+      burst(victim.x, victim.y - 15, victim.i, 22);
+      burst(victim.x, victim.y - 10, victim.i, 14);
       game.lastImpact = { side: victim.i, kind: 'shield', time: game.time };
-      game.hitStop = Math.max(game.hitStop, .075);
+      game.hitStop = Math.max(game.hitStop, .1);
       characterSound(victim, 'block');
     } else {
       victim.dashLeft = 0;
       victim.reboundLeft = 0;
       victim.stunned = Math.max(victim.stunned, stun);
       victim.blink = .42;
-      victim.impactLeft = .26;
+      victim.impactLeft = .3;
       victim.vx = dx * power;
       victim.vy = dy * power;
       react(victim, 'dizzy', Math.max(.45, stun));
       react(attacker, 'happy', .35);
-      burst(victim.x, victim.y - 15, attacker.i, 16);
+      burst(victim.x, victim.y - 15, attacker.i, 20);
+      burst(victim.x, victim.y - 10, attacker.i, 12);
       game.lastImpact = { side: attacker.i, kind: CHARACTERS[attacker.characterId].skill.kind, time: game.time };
-      game.hitStop = Math.max(game.hitStop, .045);
+      game.hitStop = Math.max(game.hitStop, .08);
       characterSound(victim, 'hit');
       hit = true;
     }
-    game.shake = .18;
-    game.impactFlash = .14;
-    tone(160, .13, 'square', .035, .75);
+    game.shake = .28;
+    game.impactFlash = .2;
+    tone(160, .15, 'square', .05, .7);
+    tone(120, .1, 'sawtooth', .03, .5);
     // Sync the impact to the online guest: particles/shake/sound are local,
     // so without this the guest would feel none of the punch.
     if (game.mode === 'online') {
@@ -940,8 +949,8 @@
       }
       game.ruleTarget = target;
       game.ruleMove = { index, fromX: seat.x, fromY: seat.y, toX: target.x, toY: target.y, elapsed: 0, duration: rule.moveDuration };
-      burst(seat.x, seat.y, 0, 15);
-      game.shake = .08;
+      burst(seat.x, seat.y, 0, 18);
+      game.shake = .14;
       showBanner('沙发搬家！', .65);
       tone(510, .17, 'triangle', .06);
     },
@@ -1038,8 +1047,8 @@
         seat.y = move.toY;
         game.ruleMove = null;
         game.rulePhase = 'triggered';
-        burst(seat.x, seat.y, 1, 15);
-        game.shake = .12;
+        burst(seat.x, seat.y, 1, 18);
+        game.shake = .18;
         updateRuleHud();
       }
       return;
@@ -1381,6 +1390,35 @@
       return;
     }
     if (game.phase !== 'playing') return;
+    // 混沌模式: every 3-5 seconds the room rule mutates into a different one,
+    // so all sofa mechanics show up randomly within a single match.
+    // This runs early to ensure mutations happen even during hitStop.
+    if (game.mode === 'chaos') {
+      game.chaosTimer = (game.chaosTimer || 0) + dt;
+      if (!game.chaosNext) game.chaosNext = 3 + Math.random() * 2;
+      if (game.chaosTimer >= game.chaosNext) {
+        game.chaosTimer = 0;
+        game.chaosNext = 3 + Math.random() * 2;
+        const pool = RULE_IDS.filter(id => id !== (game.rule && game.rule.id));
+        const newId = pool[Math.floor(Math.random() * pool.length)];
+        game.rule = RULES[newId];
+        game.previousRule = newId;
+        game.ruleHistory.push(newId);
+        game.rulePhase = (newId === 'frenzy' || newId === 'mash' || newId === 'morph') ? 'active' : 'idle';
+        game.elapsed = 0;
+        game.ruleMove = null;
+        game.ruleTarget = null;
+        showBanner(`⚡ 机制突变：${RULES[newId].name}！`, 1.5);
+        // Strong visual and audio feedback for chaos mutation
+        game.shake = .25;
+        game.impactFlash = .18;
+        burst(W / 2, H / 2, 0, 24);
+        burst(W / 2, H / 2, 1, 24);
+        tone(420 + Math.random() * 180, .22, 'sawtooth', .08, 1.5);
+        tone(280 + Math.random() * 120, .18, 'square', .06, .8);
+        updateRuleHud();
+      }
+    }
     if (game.playTipTime > 0) {
       game.playTipTime = Math.max(0, game.playTipTime - dt);
       if (!game.playTipTime) $('play-tip').classList.remove('show');
@@ -1409,28 +1447,6 @@
       }
     }
     updateTraps();
-    // 混沌模式: every 5-9 seconds the room rule mutates into a different one,
-    // so all sofa mechanics show up randomly within a single match.
-    if (game.mode === 'chaos') {
-      game.chaosTimer = (game.chaosTimer || 0) + dt;
-      if (!game.chaosNext) game.chaosNext = 5 + Math.random() * 4;
-      if (game.chaosTimer >= game.chaosNext) {
-        game.chaosTimer = 0;
-        game.chaosNext = 5 + Math.random() * 4;
-        const pool = RULE_IDS.filter(id => id !== (game.rule && game.rule.id));
-        const newId = pool[Math.floor(Math.random() * pool.length)];
-        game.rule = RULES[newId];
-        game.previousRule = newId;
-        game.ruleHistory.push(newId);
-        game.rulePhase = (newId === 'frenzy' || newId === 'mash' || newId === 'morph') ? 'active' : 'idle';
-        game.elapsed = 0;
-        game.ruleMove = null;
-        game.ruleTarget = null;
-        showBanner(`机制突变：${RULES[newId].name}！`, 1.2);
-        tone(420 + Math.random() * 180, .18, 'sawtooth', .05, 1.2);
-        updateRuleHud();
-      }
-    }
     // With several sofas, two campers on separate seats would otherwise both fill up
     // at the same moment and the array order would decide the round. When the opponent
     // is lounging on a different sofa, progress freezes until someone breaks the standoff.
@@ -2026,6 +2042,14 @@
     else if (document.body.classList.contains('in-match') && !game.paused) startBackgroundMusic();
     tone(620, .09);
   });
+  // Resume audio context on first user interaction (browser autoplay policy)
+  const resumeAudioOnInteraction = () => {
+    if (game.audioContext && game.audioContext.state === 'suspended') {
+      game.audioContext.resume();
+    }
+  };
+  document.addEventListener('click', resumeAudioOnInteraction, { once: true, capture: true });
+  document.addEventListener('touchstart', resumeAudioOnInteraction, { once: true, capture: true });
   document.addEventListener('keydown', event => {
     if ($('poster-dialog').open || $('help-dialog').open) return;
     if (game.replay && ['Space', 'Enter', 'Escape'].includes(event.code)) {
