@@ -380,7 +380,7 @@ body.desktop-mode .help-body section{border-color:#2a3350}
   .difficulty-selector{margin:6px 0}
   body.multi-sofa .canvas-frame{height:auto;aspect-ratio:4/3;max-height:calc(100dvh - 245px)}
   body.multi-sofa .canvas-frame canvas{position:absolute;top:0;left:50%;width:auto;height:100%;max-width:none;aspect-ratio:auto;transform:translateX(-50%)}
-  body.online-match .canvas-frame{height:auto;aspect-ratio:16/9;max-height:calc(100dvh - 245px)}
+  body.online-match .canvas-frame{height:auto;aspect-ratio:16/9;max-height:calc(100dvh - 180px)}
   body.online-match .canvas-frame canvas{position:static;width:100%;height:auto;max-width:100%;aspect-ratio:16/9;transform:none}
   body:not(.in-match) .mobile-controls{display:none}
 }

@@ -1919,7 +1919,16 @@
   }));
   $('fullscreen-btn').addEventListener('click', enterFullscreen);
   $('exit-fullscreen-btn').addEventListener('click', exitFullscreen);
-  $('demo-btn').addEventListener('click', () => { game.mode = 'demo'; syncMode(); startMatch(); enterFullscreen(); });
+  $('demo-btn').addEventListener('click', () => {
+    // Clean up online connection before entering demo mode
+    if (game.mode === 'online' && onlineConnected()) {
+      leaveOnlineRoom('你已离开房间');
+    }
+    game.mode = 'demo';
+    syncMode();
+    startMatch();
+    enterFullscreen();
+  });
   $('stop-demo-btn').addEventListener('click', stopDemo);
   $('start-btn').addEventListener('click', () => {
     if (game.mode === 'online') {
@@ -2164,6 +2173,10 @@
   }
 
   function showOnlineScreen(message) {
+    // If we're already in an online session (waiting/select/playing), clean up first
+    if (onlineState !== 'menu' && onlineConnected()) {
+      leaveOnlineRoom();
+    }
     hideAllScreens();
     stopBackgroundMusic();
     document.body.classList.remove('in-match', 'match-finished', 'online-match');
@@ -2431,9 +2444,16 @@
   function beginOnlineClientMatch(picks, sofaCount, matchId, epoch) {
     if (onlinePlayerNumber !== 1 || !Array.isArray(picks) || picks.length !== 2 || !picks.every(id => typeof id === 'string' && CHARACTERS[id])) return;
     if (!Number.isInteger(matchId) || matchId <= onlineMatchId || epoch !== onlineLobbyEpoch) return;
-    const fromLobby = onlineState === 'select' && onlineMyReady && onlineOpponentReady;
+    const fromLobby = onlineState === 'select' && onlineMyCharacter && onlineOpponentCharacter;
     const fromResult = onlineState === 'playing' && game.phase === 'finished';
-    if (!fromLobby && !fromResult) return;
+    // Accept new match even if we haven't reached finished yet (fast rematch race)
+    const fromPlaying = onlineState === 'playing' && matchId > onlineMatchId + 1;
+    if (!fromLobby && !fromResult && !fromPlaying) return;
+    // Accept gameStart even if we cancelled ready (race condition): host already started
+    if (fromLobby && !onlineMyReady) {
+      // Auto-ready to sync with host's state
+      onlineMyReady = true;
+    }
     onlineMatchId = matchId;
     onlineState = 'playing';
     game.mode = 'online';
@@ -2661,9 +2681,10 @@
     p.vy = snap.vy;
     const dx = snap.x - p.x, dy = snap.y - p.y;
     const error = Math.hypot(dx, dy);
-    if (isLocal && !snapPosition && error < 160 && snap.stunned <= 0 && !locallyStunned) {
+    if (isLocal && !snapPosition && error < 100 && snap.stunned <= 0 && !locallyStunned) {
       // Ignore normal round-trip drift; only bleed off meaningful disagreement.
       // Constantly pulling towards an older host position causes mobile rubber-banding.
+      // Threshold 100px: blink distance is 138px, so blinks snap immediately.
       if (error > 24) {
         const correction = Math.min(5, error * .16);
         p.x += dx / error * correction;
