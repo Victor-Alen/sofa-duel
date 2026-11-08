@@ -1888,6 +1888,26 @@
     } else if (p.characterId === 'trap') {
       ctx.fillStyle = light; ctx.beginPath(); ctx.moveTo(15, -29); ctx.lineTo(6, -35); ctx.lineTo(7, -24); ctx.closePath(); ctx.moveTo(17, -29); ctx.lineTo(27, -35); ctx.lineTo(26, -24); ctx.closePath(); ctx.fill();
       ctx.fillStyle = dark; ctx.beginPath(); ctx.arc(16, -29, 3.5, 0, 7); ctx.fill();
+    } else if (p.characterId === 'vampire') {
+      // Vampire: bat wings
+      ctx.fillStyle = dark;
+      ctx.beginPath(); ctx.moveTo(-18, -20); ctx.quadraticCurveTo(-28, -28, -25, -15); ctx.quadraticCurveTo(-22, -18, -18, -20); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(18, -20); ctx.quadraticCurveTo(28, -28, 25, -15); ctx.quadraticCurveTo(22, -18, 18, -20); ctx.fill();
+    } else if (p.characterId === 'knight') {
+      // Knight: helmet visor
+      ctx.strokeStyle = light; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(-8, -22); ctx.lineTo(8, -22); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(-6, -18); ctx.lineTo(6, -18); ctx.stroke();
+    } else if (p.characterId === 'ninja') {
+      // Ninja: mask strap
+      ctx.strokeStyle = light; ctx.lineWidth = 2.5;
+      ctx.beginPath(); ctx.moveTo(-20, -15); ctx.lineTo(20, -15); ctx.stroke();
+    } else if (p.characterId === 'mage') {
+      // Mage: wizard hat
+      ctx.fillStyle = dark;
+      ctx.beginPath(); ctx.moveTo(0, -38); ctx.lineTo(-12, -25); ctx.lineTo(12, -25); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = light;
+      ctx.beginPath(); ctx.arc(0, -38, 3, 0, 7); ctx.fill();
     }
   }
 
@@ -1937,6 +1957,10 @@
       else if (kind === 'trap') hands = [[-22, 3], [23, -24]];
       else if (kind === 'dash') hands = [[-25, 5], [25, 5]];
       else if (kind === 'blink') hands = [[-29, -14], [29, -14]];
+      else if (kind === 'vampire') hands = [[-28, -10], [28, -10]];
+      else if (kind === 'knight') hands = [[-30, -5], [30, -5]];
+      else if (kind === 'ninja') hands = [[-26, -12], [26, -12]];
+      else if (kind === 'mage') hands = [[-32, -15], [32, -15]];
     }
     ctx.fillStyle = dark;
     for (const hand of hands) { ctx.beginPath(); ctx.ellipse(hand[0], hand[1], 8, 7, 0, 0, 7); ctx.fill(); }
@@ -1978,6 +2002,44 @@
     }
     if (p.stunned > 0) { ctx.fillStyle = '#fff3a2'; ctx.font = 'bold 19px sans-serif'; ctx.textAlign = 'center'; ctx.fillText('✦', x + 25, y - 32); }
     if (mood === 'worried' || mood === 'surprised') { ctx.fillStyle = '#fffaf0'; ctx.font = '900 18px sans-serif'; ctx.textAlign = 'center'; ctx.fillText('!', x - 29, y - 29); }
+    // Vampire skill effect: dark aura
+    if (p.vampireLeft > 0) {
+      const progress = p.vampireLeft / CHARACTERS[p.characterId].skill.duration;
+      ctx.strokeStyle = '#8b45a6'; ctx.lineWidth = 3; ctx.globalAlpha = progress * 0.6;
+      ctx.beginPath(); ctx.arc(x, y - 7, 32 + Math.sin(now / 60) * 3, 0, 7); ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+    // Knight skill effect: rotating sword
+    if (p.knightLeft > 0) {
+      const angle = (now / 80) % (Math.PI * 2);
+      const radius = p.knightRadius || 65;
+      ctx.strokeStyle = '#e8e8e8'; ctx.lineWidth = 4; ctx.globalAlpha = 0.8;
+      ctx.beginPath();
+      ctx.moveTo(x + Math.cos(angle) * 20, y - 7 + Math.sin(angle) * 20);
+      ctx.lineTo(x + Math.cos(angle) * radius, y - 7 + Math.sin(angle) * radius);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(x + Math.cos(angle + Math.PI) * 20, y - 7 + Math.sin(angle + Math.PI) * 20);
+      ctx.lineTo(x + Math.cos(angle + Math.PI) * radius, y - 7 + Math.sin(angle + Math.PI) * radius);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+    // Ninja skill effect: shadow clone
+    if (p.ninjaClone && p.ninjaClone.life > 0) {
+      const alpha = Math.min(1, p.ninjaClone.life / 0.5) * 0.4;
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = '#4a4a4a';
+      ctx.beginPath(); ctx.arc(p.ninjaClone.x, p.ninjaClone.y - 7, 24, 0, 7); ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+    // Mage skill effect: magic projectile
+    if (p.mageProjectile) {
+      const proj = p.mageProjectile;
+      ctx.fillStyle = '#6b8de3';
+      ctx.beginPath(); ctx.arc(proj.x, proj.y, 8, 0, 7); ctx.fill();
+      ctx.fillStyle = '#fff';
+      ctx.beginPath(); ctx.arc(proj.x, proj.y, 4, 0, 7); ctx.fill();
+    }
     roundRect(x - 27, y - 65, 54, 21, 9, '#fffaf0');
     ctx.fillStyle = dark; ctx.font = '800 12px Noto Sans SC, sans-serif'; ctx.textAlign = 'center'; ctx.fillText(character.name, x, y - 49);
     if (p.skillCooldown > 0) {
