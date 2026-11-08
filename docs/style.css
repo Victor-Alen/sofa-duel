@@ -425,4 +425,12 @@ body.desktop-mode .help-body section{border-color:#2a3350}
 #audio-dialog::backdrop{background:#2a201a66}
 #audio-dialog h3{margin:0 0 10px;color:#7c5a41}
 
+/* Music style selector */
+.music-style-selector{margin:10px 0;text-align:left}
+.music-style-selector label{display:block;font-size:13px;font-weight:700;color:#7c5a41;margin-bottom:6px}
+.music-style-options{display:flex;gap:6px}
+.music-style-btn{flex:1;padding:8px 10px;border:1.5px solid #e2c4ad;border-radius:10px;background:#fff7ec;color:#7c5a41;font-size:12px;font-weight:700;cursor:pointer;transition:all .15s}
+.music-style-btn:hover{background:#fdeee1;border-color:#d9a87c}
+.music-style-btn.active{background:#ff6c52;color:white;border-color:#ff6c52;box-shadow:0 2px 8px #ff6c5244}
+
 .match-stats{margin:2px 0 0;font-weight:700;color:#9c6b45;font-size:14px}

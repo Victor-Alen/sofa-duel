@@ -71,7 +71,12 @@
   });
   let musicOn = true;
   let sfxOn = true;
-  try { musicOn = localStorage.getItem('sofa-duel-audio-music') !== 'off'; sfxOn = localStorage.getItem('sofa-duel-audio-sfx') !== 'off'; } catch (_) {}
+  let musicStyle = 'cheerful';
+  try {
+    musicOn = localStorage.getItem('sofa-duel-audio-music') !== 'off';
+    sfxOn = localStorage.getItem('sofa-duel-audio-sfx') !== 'off';
+    musicStyle = localStorage.getItem('sofa-duel-music-style') || 'cheerful';
+  } catch (_) {}
   const game = { mode: 'cpu', difficulty: 'normal', lastCpuPick: null, phase: 'menu', manualPicks: ['dash', 'guard'], picks: ['dash', 'guard'], scores: [0, 0], capture: [0, 0], time: ROUND_SECONDS, seats: [], sofaCount: 1, matchSofas: 1, lastSeatLayout: '', rule: null, previousRule: null, ruleHistory: [], ruleTarget: null, ruleMove: null, rulePhase: 'idle', elapsed: 0, round: 0, tiedRounds: 0, wait: 0, bannerTime: 0, bannerSeq: 0, playTipTime: 0, bannerText: '', particles: [], shake: 0, hitStop: 0, paused: false, audio: (() => { try { return localStorage.getItem('sofa-duel-audio') !== 'off'; } catch (_) { return true; } })(), audioContext: null, replay: null, highlightFrames: [], highlightClock: 0, lastImpact: null, standoff: false, combo: [0, 0], maxCombo: [0, 0], mashCounts: [0, 0], stats: loadStats(), music: null, musicGain: null, achievementQueue: [], currentAchievement: null };
   let last = performance.now();
   let lastBumpAt = 0;  // throttle the body-squeeze thud
@@ -183,67 +188,98 @@
       gain.gain.linearRampToValueAtTime(.28, ac.currentTime + 1.2);
       gain.connect(ac.destination);
       game.musicGain = gain;
-      // 每个角色自带音乐色：垫底波形与音高跟随本地角色，低音跟随对手角色。
-      const musicMe = CHARACTERS[game.picks[localPlayerIndex()]] || CHARACTERS[CHARACTER_IDS[0]];
-      const musicFoe = CHARACTERS[game.picks[1 - localPlayerIndex()]] || musicMe;
-      const transpose = musicMe.pitch || 1;
-      const playBass = (freq, startTime, duration) => {
-        const osc = ac.createOscillator();
-        const oscGain = ac.createGain();
-        osc.type = musicFoe.wave || 'triangle';
-        osc.frequency.setValueAtTime(freq / 2 * (musicFoe.pitch || 1), startTime);
-        oscGain.gain.setValueAtTime(.3, startTime);
-        oscGain.gain.exponentialRampToValueAtTime(.001, startTime + duration);
-        osc.connect(oscGain);
-        oscGain.connect(gain);
-        osc.start(startTime);
-        osc.stop(startTime + duration);
+
+      // Music styles: cheerful (轻快), energetic (激情), relaxed (舒缓)
+      const styles = {
+        cheerful: {
+          tempo: 140, // BPM
+          scale: [261.63, 293.66, 329.63, 349.23, 392.00, 440.00, 493.88, 523.25], // C major pentatonic + octave
+          chordProg: [[0,2,4], [3,5,7], [4,6,1], [0,2,4]], // I-IV-V-I
+          bassPattern: [1, 0, 1, 0, 1, 0, 1, 0],
+          melodyPattern: [1, 0, 1, 1, 0, 1, 0, 1],
+          wave: 'sine',
+          bassWave: 'triangle'
+        },
+        energetic: {
+          tempo: 160,
+          scale: [329.63, 369.99, 415.30, 440.00, 493.88, 554.37, 622.25, 659.25], // E major
+          chordProg: [[0,2,4], [2,4,6], [3,5,7], [0,2,4]],
+          bassPattern: [1, 1, 0, 1, 1, 0, 1, 1],
+          melodyPattern: [1, 1, 1, 0, 1, 1, 1, 1],
+          wave: 'square',
+          bassWave: 'sawtooth'
+        },
+        relaxed: {
+          tempo: 90,
+          scale: [220.00, 246.94, 277.18, 293.66, 329.63, 369.99, 415.30, 440.00], // A minor
+          chordProg: [[0,2,4], [4,6,1], [5,0,2], [0,2,4]],
+          bassPattern: [1, 0, 0, 1, 0, 0, 1, 0],
+          melodyPattern: [1, 0, 1, 0, 1, 0, 1, 0],
+          wave: 'sine',
+          bassWave: 'sine'
+        }
       };
-      const playChord = (freq, startTime, duration) => {
-        const osc = ac.createOscillator();
-        const oscGain = ac.createGain();
-        osc.type = musicMe.wave || 'sine';
-        osc.frequency.setValueAtTime(freq, startTime);
-        oscGain.gain.setValueAtTime(.45, startTime);
-        oscGain.gain.exponentialRampToValueAtTime(.001, startTime + duration);
-        osc.connect(oscGain);
-        oscGain.connect(gain);
-        osc.start(startTime);
-        osc.stop(startTime + duration);
-      };
-      const chords = [[261.63, 329.63, 392], [293.66, 369.99, 440], [329.63, 415.30, 493.88], [349.23, 440, 523.25]];
+
+      const style = styles[musicStyle] || styles.cheerful;
+      const beatDuration = 60 / style.tempo;
+      let beatIndex = 0;
       let chordIndex = 0;
-      const playPluck = (freq, startTime) => {
+
+      const playNote = (freq, startTime, duration, type = 'sine', volume = .3) => {
         const osc = ac.createOscillator();
         const oscGain = ac.createGain();
-        osc.type = musicMe.wave || 'sine';
-        osc.frequency.setValueAtTime(freq * 2, startTime);
-        oscGain.gain.setValueAtTime(.18, startTime);
-        oscGain.gain.exponentialRampToValueAtTime(.001, startTime + .3);
+        osc.type = type;
+        osc.frequency.setValueAtTime(freq, startTime);
+        oscGain.gain.setValueAtTime(volume, startTime);
+        oscGain.gain.exponentialRampToValueAtTime(.001, startTime + duration);
         osc.connect(oscGain);
         oscGain.connect(gain);
         osc.start(startTime);
-        osc.stop(startTime + .3);
+        osc.stop(startTime + duration);
       };
+
       const loopMusic = () => {
         if (!game.music) return;
         const now = ac.currentTime;
-        const chord = chords[chordIndex % chords.length].map(f => f * transpose);
-        playBass(chord[0], now, 3.8);
-        for (const freq of chord) playChord(freq, now, 3.8);
-        // light arpeggio pulse: one soft high note per second keeps the loop alive
-        for (let beat = 0; beat < 4; beat++) playPluck(chord[beat % chord.length], now + beat + .02);
+        const chord = style.chordProg[chordIndex % style.chordProg.length];
+
+        // Play 8 beats per loop
+        for (let i = 0; i < 8; i++) {
+          const beatTime = now + i * beatDuration;
+
+          // Bass line
+          if (style.bassPattern[i]) {
+            const bassFreq = style.scale[chord[0]] / 2;
+            playNote(bassFreq, beatTime, beatDuration * .8, style.bassWave, .35);
+          }
+
+          // Chord pads
+          if (i === 0) {
+            for (const noteIdx of chord) {
+              playNote(style.scale[noteIdx], beatTime, beatDuration * 7.5, style.wave, .15);
+            }
+          }
+
+          // Melody
+          if (style.melodyPattern[i]) {
+            const melodyIdx = (chord[i % chord.length] + i) % style.scale.length;
+            const melodyFreq = style.scale[melodyIdx] * 2;
+            playNote(melodyFreq, beatTime, beatDuration * .6, style.wave, .22);
+          }
+        }
+
         chordIndex++;
-        // Dynamic tempo: the hotter the combo, the faster the loop drives the room.
+        beatIndex += 8;
+
+        // Dynamic tempo based on game state
         const heat = Math.max(game.combo[0], game.combo[1]);
-        // 决胜分 (2:2): the loop itself gets urgent.
-        const suddenDeathMusic = game.scores[0] === WIN_SCORE - 1 && game.scores[1] === WIN_SCORE - 1;
-        const interval = suddenDeathMusic ? 3000 : heat >= 3 ? 3200 : heat >= 2 ? 3600 : 4000;
-        game.music = setTimeout(loopMusic, interval);
+        const suddenDeath = game.scores[0] === WIN_SCORE - 1 && game.scores[1] === WIN_SCORE - 1;
+        const tempoMult = suddenDeath ? .75 : heat >= 3 ? .8 : heat >= 2 ? .9 : 1;
+        const loopDuration = beatDuration * 8 * 1000 * tempoMult;
+
+        game.music = setTimeout(loopMusic, loopDuration);
       };
-      // CRITICAL: arm the loop BEFORE the first call — the guard inside reads
-      // game.music, and the old code only assigned it after that guard, so the
-      // very first invocation returned immediately and music NEVER started.
+
       game.music = 'playing';
       loopMusic();
     } catch (_) { game.music = null; }
@@ -2030,6 +2066,26 @@
     refreshAudioSettings();
     if (sfxOn) tone(620, .08);
   });
+  // Music style selection
+  const refreshMusicStyleUI = () => {
+    document.querySelectorAll('.music-style-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.style === musicStyle);
+    });
+  };
+  document.querySelectorAll('.music-style-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      musicStyle = btn.dataset.style;
+      try { localStorage.setItem('sofa-duel-music-style', musicStyle); } catch (_) {}
+      refreshMusicStyleUI();
+      // Restart music with new style if playing
+      if (document.body.classList.contains('in-match') && !game.paused && game.audio && musicOn) {
+        stopBackgroundMusic();
+        startBackgroundMusic();
+      }
+      if (sfxOn) tone(520 + Math.random() * 80, .08);
+    });
+  });
+  refreshMusicStyleUI();
   $('audio-close-btn')?.addEventListener('click', () => $('audio-dialog').close());
   $('audio-dialog')?.addEventListener('click', event => { if (event.target === $('audio-dialog')) $('audio-dialog').close(); });
   $('sound-btn').addEventListener('click', () => {
