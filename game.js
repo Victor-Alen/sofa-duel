@@ -1512,6 +1512,35 @@
     game.shake = Math.max(0, game.shake - dt);
     game.particles = game.particles.filter(p => p.life > 0);
     for (const p of game.particles) { p.life -= dt; p.vy += 210 * dt; p.x += p.vx * dt; p.y += p.vy * dt; }
+    // 混沌模式: every 3-5 seconds the room rule mutates into a different one,
+    // so all sofa mechanics show up randomly within a single match.
+    // This runs early to ensure mutations happen even during hitStop.
+    if (game.mode === 'chaos' && game.phase === 'playing') {
+      game.chaosTimer = (game.chaosTimer || 0) + dt;
+      if (!game.chaosNext) game.chaosNext = 3 + Math.random() * 2;
+      if (game.chaosTimer >= game.chaosNext) {
+        game.chaosTimer = 0;
+        game.chaosNext = 3 + Math.random() * 2;
+        const pool = RULE_IDS.filter(id => id !== (game.rule && game.rule.id));
+        const newId = pool[Math.floor(Math.random() * pool.length)];
+        game.rule = RULES[newId];
+        game.previousRule = newId;
+        game.ruleHistory.push(newId);
+        game.rulePhase = (newId === 'frenzy' || newId === 'mash' || newId === 'morph') ? 'active' : 'idle';
+        game.elapsed = 0;
+        game.ruleMove = null;
+        game.ruleTarget = null;
+        showBanner(`⚡ 机制突变：${RULES[newId].name}！`, 1.5);
+        // Strong visual and audio feedback for chaos mutation
+        game.shake = .25;
+        game.impactFlash = .18;
+        burst(W / 2, H / 2, 0, 24);
+        burst(W / 2, H / 2, 1, 24);
+        tone(420 + Math.random() * 180, .22, 'sawtooth', .08, 1.5);
+        tone(280 + Math.random() * 120, .18, 'square', .06, .8);
+        updateRuleHud();
+      }
+    }
     if (game.hitStop > 0 && game.phase === 'playing') {
       game.hitStop = Math.max(0, game.hitStop - dt);
       updateHud();
@@ -1539,35 +1568,6 @@
       return;
     }
     if (game.phase !== 'playing') return;
-    // 混沌模式: every 3-5 seconds the room rule mutates into a different one,
-    // so all sofa mechanics show up randomly within a single match.
-    // This runs early to ensure mutations happen even during hitStop.
-    if (game.mode === 'chaos') {
-      game.chaosTimer = (game.chaosTimer || 0) + dt;
-      if (!game.chaosNext) game.chaosNext = 3 + Math.random() * 2;
-      if (game.chaosTimer >= game.chaosNext) {
-        game.chaosTimer = 0;
-        game.chaosNext = 3 + Math.random() * 2;
-        const pool = RULE_IDS.filter(id => id !== (game.rule && game.rule.id));
-        const newId = pool[Math.floor(Math.random() * pool.length)];
-        game.rule = RULES[newId];
-        game.previousRule = newId;
-        game.ruleHistory.push(newId);
-        game.rulePhase = (newId === 'frenzy' || newId === 'mash' || newId === 'morph') ? 'active' : 'idle';
-        game.elapsed = 0;
-        game.ruleMove = null;
-        game.ruleTarget = null;
-        showBanner(`⚡ 机制突变：${RULES[newId].name}！`, 1.5);
-        // Strong visual and audio feedback for chaos mutation
-        game.shake = .25;
-        game.impactFlash = .18;
-        burst(W / 2, H / 2, 0, 24);
-        burst(W / 2, H / 2, 1, 24);
-        tone(420 + Math.random() * 180, .22, 'sawtooth', .08, 1.5);
-        tone(280 + Math.random() * 120, .18, 'square', .06, .8);
-        updateRuleHud();
-      }
-    }
     if (game.playTipTime > 0) {
       game.playTipTime = Math.max(0, game.playTipTime - dt);
       if (!game.playTipTime) $('play-tip').classList.remove('show');
@@ -2219,6 +2219,30 @@
   };
   document.addEventListener('click', resumeAudioOnInteraction, { once: true, capture: true });
   document.addEventListener('touchstart', resumeAudioOnInteraction, { once: true, capture: true });
+
+  // Auto-rotate to landscape fullscreen on mobile when match starts
+  const tryAutoLandscape = () => {
+    if (!narrowScreen()) return; // Only on mobile
+    // Try to request fullscreen
+    const elem = document.documentElement;
+    if (elem.requestFullscreen) {
+      elem.requestFullscreen().catch(() => {});
+    } else if (elem.webkitRequestFullscreen) {
+      elem.webkitRequestFullscreen().catch(() => {});
+    }
+    // Try to lock orientation to landscape
+    if (screen.orientation && screen.orientation.lock) {
+      screen.orientation.lock('landscape').catch(() => {});
+    }
+  };
+  // Trigger on match start
+  const originalStartMatch = startMatch;
+  startMatch = function() {
+    originalStartMatch();
+    if (game.phase === 'countdown' || game.phase === 'playing') {
+      setTimeout(tryAutoLandscape, 100);
+    }
+  };
   document.addEventListener('keydown', event => {
     if ($('poster-dialog').open || $('help-dialog').open) return;
     if (game.replay && ['Space', 'Enter', 'Escape'].includes(event.code)) {
@@ -3264,6 +3288,7 @@
           seats: game.seats.map(seat => ({ x: seat.x, y: seat.y, capture: [...seat.capture], scale: seat.scale || 1 })),
           morphT: game.morphT || 0, morphPhase: game.morphPhase, rulePhase: game.rulePhase,
           musicActive: Boolean(game.music),
+          chaosTimer: game.chaosTimer || 0, chaosNext: game.chaosNext || 0,
           players: players.map(p => ({ x: p.x, y: p.y, cooldown: p.skillCooldown, characterId: p.characterId })),
           opponentInput: { ...onlineOpponentInput }
         };
