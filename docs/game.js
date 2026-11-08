@@ -83,7 +83,7 @@
   let lastCaptureTickAt = 0;  // throttle the capture heartbeat
 
   function makePlayer(i) {
-    return { i, characterId: i ? 'guard' : 'dash', x: i ? 740 : 220, y: 360, vx: 0, vy: 0, facingX: i ? -1 : 1, facingY: 0, dashLeft: 0, dashHit: false, shieldLeft: 0, shieldHit: false, pulseLeft: 0, pullLeft: 0, warpLeft: 0, reboundLeft: 0, reboundX: 0, reboundY: 0, reboundPower: 0, trap: null, skillCooldown: 0, stunned: 0, blink: 0, walk: 0, aiDecision: 0, wantsSkill: false, anim: i * 1.7, emotion: 'neutral', emotionLeft: 0, castLeft: 0, castTotal: .4, impactLeft: 0, celebrateLeft: 0 };
+    return { i, characterId: i ? 'guard' : 'dash', x: i ? 740 : 220, y: 360, vx: 0, vy: 0, facingX: i ? -1 : 1, facingY: 0, dashLeft: 0, dashHit: false, shieldLeft: 0, shieldHit: false, pulseLeft: 0, pullLeft: 0, warpLeft: 0, reboundLeft: 0, reboundX: 0, reboundY: 0, reboundPower: 0, trap: null, skillCooldown: 0, stunned: 0, blink: 0, walk: 0, aiDecision: 0, wantsSkill: false, anim: i * 1.7, emotion: 'neutral', emotionLeft: 0, castLeft: 0, castTotal: .4, impactLeft: 0, celebrateLeft: 0, vampireLeft: 0, knightLeft: 0, knightHit: false, knightRadius: 0, knightStun: 0, knightPower: 0, ninjaLeft: 0, ninjaClone: null, speedBoost: 0, mageProjectile: null };
   }
 
   function tone(frequency = 440, duration = .09, type = 'sine', volume = .055, slide = 1) {
@@ -945,6 +945,60 @@
       p.trap = { x: p.x, y: p.y + 12, left: skill.duration, arm: skill.arm, radius: skill.radius, stun: skill.stun };
       burst(p.x, p.y + 12, p.i, 10);
       tone(480, .11, 'triangle', .045);
+    },
+    vampire(p, skill) {
+      // Vampire: lifesteal + brief invulnerability (bat form)
+      p.vampireLeft = skill.duration;
+      p.shieldLeft = Math.max(p.shieldLeft, skill.duration * 0.6); // Partial invulnerability
+      const other = players[1 - p.i];
+      if (dist(p, other) <= 80) {
+        // Lifesteal: heal self and stun opponent
+        other.stunned = Math.max(other.stunned, skill.stun);
+        other.impactLeft = .3;
+        react(other, 'dizzy', skill.stun);
+        react(p, 'smug', .5);
+        burst(other.x, other.y - 10, p.i, 16);
+        tone(280, .18, 'sawtooth', .06, .7);
+        game.lastImpact = { side: p.i, kind: 'vampire', time: game.time };
+      }
+      burst(p.x, p.y - 15, p.i, 12);
+      tone(220, .22, 'sine', .05, .6);
+    },
+    knight(p, skill) {
+      // Knight: rotating sword that stuns opponents on contact
+      p.knightLeft = skill.duration;
+      p.knightRadius = skill.radius;
+      p.knightStun = skill.stun;
+      p.knightPower = skill.power;
+      burst(p.x, p.y, p.i, 14);
+      tone(180, .15, 'square', .06, .8);
+    },
+    ninja(p, skill) {
+      // Ninja: shadow clone + speed boost
+      p.ninjaLeft = skill.duration;
+      p.ninjaClone = { x: p.x, y: p.y, life: skill.duration };
+      p.speedBoost = skill.boost;
+      burst(p.x, p.y, p.i, 18);
+      burst(p.x + 20, p.y, p.i, 10);
+      burst(p.x - 20, p.y, p.i, 10);
+      tone(620, .1, 'sine', .05, 1.3);
+    },
+    mage(p, skill) {
+      // Mage: ranged magic projectile
+      const other = players[1 - p.i];
+      const dx = other.x - p.x, dy = other.y - p.y;
+      const distance = Math.hypot(dx, dy) || 1;
+      p.mageProjectile = {
+        x: p.x, y: p.y,
+        vx: (dx / distance) * 400,
+        vy: (dy / distance) * 400,
+        life: 0.8,
+        radius: skill.radius,
+        power: skill.power,
+        stun: skill.stun
+      };
+      burst(p.x, p.y - 10, p.i, 8);
+      tone(520, .14, 'triangle', .055, 1.2);
     }
   };
 
@@ -1256,6 +1310,64 @@
       p.trap.arm = Math.max(0, p.trap.arm - dt);
       if (p.trap.left <= 0) p.trap = null;
     }
+    // New skill updates
+    if (p.vampireLeft > 0) p.vampireLeft = Math.max(0, p.vampireLeft - dt);
+    if (p.knightLeft > 0) {
+      p.knightLeft = Math.max(0, p.knightLeft - dt);
+      // Knight rotating sword: check collision with opponent
+      const other = players[1 - p.i];
+      if (dist(p, other) <= p.knightRadius && !p.knightHit) {
+        p.knightHit = true;
+        other.stunned = Math.max(other.stunned, p.knightStun);
+        other.impactLeft = .3;
+        const dx = other.x - p.x, dy = other.y - p.y;
+        const distance = Math.hypot(dx, dy) || 1;
+        other.vx = (dx / distance) * p.knightPower;
+        other.vy = (dy / distance) * p.knightPower;
+        react(other, 'dizzy', p.knightStun);
+        react(p, 'smug', .4);
+        burst(other.x, other.y - 10, p.i, 14);
+        game.lastImpact = { side: p.i, kind: 'knight', time: game.time };
+        game.shake = Math.max(game.shake, .15);
+        tone(200, .12, 'square', .06, .9);
+      }
+      if (p.knightLeft <= 0) p.knightHit = false;
+    }
+    if (p.ninjaLeft > 0) {
+      p.ninjaLeft = Math.max(0, p.ninjaLeft - dt);
+      if (p.ninjaClone) {
+        p.ninjaClone.life -= dt;
+        if (p.ninjaClone.life <= 0) p.ninjaClone = null;
+      }
+    }
+    if (p.speedBoost > 0) {
+      p.speedBoost = Math.max(0, p.speedBoost - dt);
+    }
+    if (p.mageProjectile) {
+      const proj = p.mageProjectile;
+      proj.x += proj.vx * dt;
+      proj.y += proj.vy * dt;
+      proj.life -= dt;
+      const other = players[1 - p.i];
+      if (dist({ x: proj.x, y: proj.y }, other) <= 30) {
+        // Hit opponent
+        other.stunned = Math.max(other.stunned, proj.stun);
+        other.impactLeft = .3;
+        const dx = other.x - proj.x, dy = other.y - proj.y;
+        const distance = Math.hypot(dx, dy) || 1;
+        other.vx = (dx / distance) * proj.power;
+        other.vy = (dy / distance) * proj.power;
+        react(other, 'dizzy', proj.stun);
+        react(p, 'happy', .35);
+        burst(other.x, other.y - 10, p.i, 16);
+        game.lastImpact = { side: p.i, kind: 'mage', time: game.time };
+        game.shake = Math.max(game.shake, .12);
+        tone(480, .1, 'triangle', .055, 1.1);
+        p.mageProjectile = null;
+      } else if (proj.life <= 0) {
+        p.mageProjectile = null;
+      }
+    }
     if (p.reboundLeft > 0) {
       p.reboundLeft = Math.max(0, p.reboundLeft - dt);
       if (p.reboundLeft === 0) {
@@ -1273,6 +1385,8 @@
       p.vy *= Math.pow(.9, dt * 60);
     } else {
       let speed = CHARACTERS[p.characterId].speed;
+      // Ninja speed boost
+      if (p.speedBoost > 0) speed *= 1.5;
       // Rubber band: the trailing player gets a gentle boost so matches stay
       // tense until the last point (applies identically on host and guest).
       if (game.phase === 'playing' && game.scores[1 - p.i] > game.scores[p.i]) speed *= 1.08;
