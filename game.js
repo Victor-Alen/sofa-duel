@@ -855,12 +855,24 @@
     let hit = false;
     if (victim.shieldLeft > 0 && !victim.shieldHit) {
       victim.shieldHit = true;
+      // Each block burns shield time: multi-block stays possible, but one
+      // activation can no longer counter every attack for its full duration.
+      victim.shieldLeft = Math.max(0, victim.shieldLeft - 0.75);
       attacker.dashLeft = 0;
-      attacker.stunned = Math.max(attacker.stunned, .3);
-      attacker.blink = .42;
-      attacker.impactLeft = .32;
-      attacker.vx = -dx * CHARACTERS[victim.characterId].skill.counterPower;
-      attacker.vy = -dy * CHARACTERS[victim.characterId].skill.counterPower;
+      const firstBlock = !victim.shieldCountered;
+      victim.shieldCountered = true;
+      if (firstBlock) {
+        attacker.stunned = Math.max(attacker.stunned, .3);
+        attacker.blink = .42;
+        attacker.impactLeft = .32;
+        attacker.vx = -dx * CHARACTERS[victim.characterId].skill.counterPower;
+        attacker.vy = -dy * CHARACTERS[victim.characterId].skill.counterPower;
+      } else {
+        // Repeat blocks still deflect, but without the full counter punch.
+        attacker.blink = .3;
+        attacker.vx = -dx * 240;
+        attacker.vy = -dy * 240;
+      }
       react(victim, 'smug', .9);
       react(attacker, 'surprised', .5);
       burst(victim.x, victim.y - 15, victim.i, 22);
@@ -910,6 +922,7 @@
     },
     shield(p, skill) {
       p.shieldLeft = skill.duration;
+      p.shieldCountered = false;
       p.shieldHit = false;
       burst(p.x, p.y - 10, p.i, 8);
       tone(570, .14, 'sine', .055);
@@ -970,12 +983,16 @@
       p.shieldLeft = Math.max(p.shieldLeft, skill.duration * 0.6); // Partial invulnerability
       const other = players[1 - p.i];
       if (dist(p, other) <= 80) {
-        // Lifesteal: stun opponent and knock them back slightly
-        other.stunned = Math.max(other.stunned, skill.stun);
-        other.impactLeft = .3;
-        react(other, 'dizzy', skill.stun);
-        react(p, 'smug', .5);
-        burst(other.x, other.y - 10, p.i, 16);
+        // Lifesteal bite: blockable like every other disable, and it drains
+        // part of the opponent's sofa-capture progress (吸取活力).
+        if (pushAway(p, other, 320, skill.stun)) {
+          let drained = 0;
+          for (const seat of game.seats) {
+            drained += seat.capture[other.i] * .5;
+            seat.capture[other.i] *= .5;
+          }
+          if (drained > 0) burst(p.x, p.y - 24, p.i, 10);
+        }
         tone(280, .18, 'sawtooth', .06, .7);
       }
       burst(p.x, p.y - 15, p.i, 12);
@@ -1233,7 +1250,14 @@
         }
       }
 
-      const target = nearSeat && (nearOther || contested) ? other : (targetSeat || other);
+      // Ninja shadow clone: bots sometimes mistake the clone for the real player
+      // and chase it until it fades (re-rolled per decision window, not per frame).
+      let chaseTarget = other;
+      if (other.ninjaClone && (nearOther || contested)) {
+        if (p.aiDecision <= 0) p.aiDeceived = Math.random() < 0.4;
+        if (p.aiDeceived) chaseTarget = { x: other.ninjaClone.x, y: other.ninjaClone.y };
+      }
+      const target = nearSeat && (nearOther || contested) ? chaseTarget : (targetSeat || other);
       let dx = target.x - p.x, dy = target.y - p.y;
       const length = Math.hypot(dx, dy);
       if (nearSeat && !nearOther && !contested) return { x: 0, y: 0 };
@@ -1273,8 +1297,14 @@
         } else if (skill.kind === 'trap') {
           const goodSpot = nearSeat || enemyDistance < 115;
           useNow = !p.trap && goodSpot && Math.random() < attemptChance;
+        } else if (skill.kind === 'vampire') {
+          // The bite only lands within its 80px lifesteal range.
+          useNow = enemyDistance < 70 && Math.random() < attemptChance;
+        } else if (skill.kind === 'ninja') {
+          // Clone + boost: race a distant sofa or slip away from a close fight.
+          useNow = (seatDistance > 90 || enemyDistance < 140) && Math.random() < attemptChance;
         } else {
-          useNow = enemyDistance < skill.radius && Math.random() < attemptChance;
+          useNow = skill.radius != null && enemyDistance < skill.radius && Math.random() < attemptChance;
         }
 
         if (useNow) {
@@ -1343,20 +1373,9 @@
       if (distance <= p.knightRadius && p.knightHitCooldown <= 0) {
         // Set cooldown to prevent continuous hitting every frame
         p.knightHitCooldown = 0.3;
-        // Use pushAway to properly knock back the opponent
-        const dx = other.x - p.x, dy = other.y - p.y;
-        const dist = Math.hypot(dx, dy) || 1;
-        const pushPower = p.knightPower || 380;
-        other.vx = (dx / dist) * pushPower;
-        other.vy = (dy / dist) * pushPower;
-        other.stunned = Math.max(other.stunned, p.knightStun || 0.6);
-        other.impactLeft = .3;
-        other.blink = .2;
-        react(other, 'dizzy', p.knightStun || 0.6);
-        react(p, 'smug', .3);
-        burst(other.x, other.y - 10, p.i, 14);
-        game.shake = Math.max(game.shake, .15);
-        tone(200, .12, 'square', .06, .9);
+        // Route through pushAway so the sword respects shields, records the
+        // impact kind and syncs juice to the online guest like every other skill.
+        if (pushAway(p, other, p.knightPower || 380, p.knightStun || 0.6)) p.knightHitCooldown = 0.8;
       }
       if (p.knightLeft <= 0) {
         p.knightHit = false;
@@ -1380,19 +1399,8 @@
       proj.life -= dt;
       const other = players[1 - p.i];
       if (dist({ x: proj.x, y: proj.y }, other) <= 30) {
-        // Hit opponent
-        other.stunned = Math.max(other.stunned, proj.stun);
-        other.impactLeft = .3;
-        const dx = other.x - proj.x, dy = other.y - proj.y;
-        const distance = Math.hypot(dx, dy) || 1;
-        other.vx = (dx / distance) * proj.power;
-        other.vy = (dy / distance) * proj.power;
-        react(other, 'dizzy', proj.stun);
-        react(p, 'happy', .35);
-        burst(other.x, other.y - 10, p.i, 16);
-        game.lastImpact = { side: p.i, kind: 'mage', time: game.time };
-        game.shake = Math.max(game.shake, .12);
-        tone(480, .1, 'triangle', .055, 1.1);
+        // Route through pushAway so shields can block the bolt like any other hit.
+        pushAway(p, other, proj.power, proj.stun);
         p.mageProjectile = null;
       } else if (proj.life <= 0) {
         p.mageProjectile = null;
@@ -3534,6 +3542,50 @@
         updatePlayer(players[0], players[0].trap.arm + .01, { x: 0, y: 0 });
         updateTraps();
         results.trapShield = { ok: players[1].stunned === 0 && players[1].shieldHit && !players[0].trap, stun: players[1].stunned };
+
+        prepare('vampire', 'dash');
+        players[0].x = 400;
+        players[0].y = 300;
+        players[1].x = 450;
+        players[1].y = 300;
+        game.seats = [{ x: 420, y: 300, capture: [0, 1], scale: 1 }];
+        useSkill(players[0]);
+        results.vampire = { ok: players[1].stunned > 0 && players[0].vampireLeft > 0 && players[0].shieldLeft > 0 && game.seats[0].capture[1] < 1, stun: players[1].stunned, drained: game.seats[0].capture[1] };
+
+        prepare('vampire', 'dash');
+        players[0].x = 300;
+        players[0].y = 300;
+        players[1].x = 540;
+        players[1].y = 300;
+        useSkill(players[0]);
+        results.vampireRange = { ok: players[1].stunned === 0 && players[0].vampireLeft > 0 };
+
+        prepare('knight', 'dash');
+        players[0].x = 400;
+        players[0].y = 300;
+        players[1].x = 445;
+        players[1].y = 300;
+        useSkill(players[0]);
+        updatePlayer(players[0], .05, { x: 0, y: 0 });
+        results.knight = { ok: players[1].stunned > 0 && players[1].vx !== 0, stun: players[1].stunned };
+
+        prepare('ninja', 'dash');
+        players[0].x = 400;
+        players[0].y = 300;
+        useSkill(players[0]);
+        results.ninja = { ok: players[0].ninjaLeft > 0 && Boolean(players[0].ninjaClone) && players[0].speedBoost > 1, boost: players[0].speedBoost };
+        updatePlayer(players[0], .05, { x: 0, y: 0 });
+        results.ninjaTick = { ok: players[0].ninjaClone && players[0].ninjaClone.life < 2 && players[0].ninjaLeft < 2 };
+
+        prepare('mage', 'dash');
+        players[0].x = 300;
+        players[0].y = 300;
+        players[1].x = 460;
+        players[1].y = 300;
+        useSkill(players[0]);
+        const hadProjectile = Boolean(players[0].mageProjectile);
+        for (let step = 0; step < 40 && players[0].mageProjectile; step++) updatePlayer(players[0], .016, { x: 0, y: 0 });
+        results.mage = { ok: hadProjectile && players[1].stunned > 0 && !players[0].mageProjectile, stun: players[1].stunned };
         return results;
       },
       checkSeats() {
