@@ -36,7 +36,7 @@
     vampire: {
       id: 'vampire', name: '德德', color: '#8b45a6', dark: '#5e2d73', light: '#b87fc9',
       speed: 215, ears: 'pointed', pitch: 380, wave: 'sawtooth', personality: '优雅地吸取对手活力',
-      skill: { kind: 'vampire', name: '吸血蝙蝠', description: '化身蝙蝠吸血，咬中吸取对手的占领进度', cooldown: 3.5, duration: 1.2, stun: 0.4 }
+      skill: { kind: 'vampire', name: '吸血蝙蝠', description: '化身蝙蝠吸血，咬中吸取对手的占领进度', cooldown: 3.5, duration: 1.2, stun: 0.4, counterPower: 450 }
     },
     knight: {
       id: 'knight', name: '剑剑', color: '#c0c0c0', dark: '#808080', light: '#e8e8e8',
