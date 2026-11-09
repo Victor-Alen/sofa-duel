@@ -63,7 +63,7 @@
     }
   });
 
-  const players = [makePlayer(0), makePlayer(1)];
+  let players = [makePlayer(0), makePlayer(1)];
   const highlightPool = Array.from({ length: HIGHLIGHT_FRAME_COUNT }, () => {
     const frame = document.createElement('canvas');
     frame.width = 480; frame.height = 270;
@@ -86,6 +86,16 @@
     return { i, characterId: i ? 'guard' : 'dash', x: i ? 740 : 220, y: 360, vx: 0, vy: 0, facingX: i ? -1 : 1, facingY: 0, dashLeft: 0, dashHit: false, shieldLeft: 0, shieldHit: false, pulseLeft: 0, pullLeft: 0, warpLeft: 0, reboundLeft: 0, reboundX: 0, reboundY: 0, reboundPower: 0, trap: null, skillCooldown: 0, stunned: 0, blink: 0, walk: 0, aiDecision: 0, wantsSkill: false, anim: i * 1.7, emotion: 'neutral', emotionLeft: 0, castLeft: 0, castTotal: .4, impactLeft: 0, celebrateLeft: 0, vampireLeft: 0, knightLeft: 0, knightHit: false, knightRadius: 0, knightStun: 0, knightPower: 0, ninjaLeft: 0, ninjaClone: null, speedBoost: 0, mageProjectile: null };
   }
 
+
+  function nearestOpponent(p) {
+    let best = null, bestDistance = Infinity;
+    for (const q of players) {
+      if (q === p) continue;
+      const distance = dist(p, q);
+      if (distance < bestDistance) { bestDistance = distance; best = q; }
+    }
+    return best;
+  }
   function tone(frequency = 440, duration = .09, type = 'sine', volume = .055, slide = 1) {
     if (!sfxOn) return;
     if (!game.audio) return;
@@ -273,7 +283,7 @@
 
         // Dynamic tempo based on game state
         const heat = Math.max(game.combo[0], game.combo[1]);
-        const suddenDeath = game.scores[0] === WIN_SCORE - 1 && game.scores[1] === WIN_SCORE - 1;
+    const suddenDeath = game.scores.filter(s => s === WIN_SCORE - 1).length >= 2;
         const tempoMult = suddenDeath ? .75 : heat >= 3 ? .8 : heat >= 2 ? .9 : 1;
         const loopDuration = beatDuration * 8 * 1000 * tempoMult;
 
@@ -313,14 +323,18 @@
 
   function resetPlayers() {
     const multi = game.seats.length > 1;
-    const spawn = multi ? [150, 810] : game.mode === 'online' || !narrowScreen() ? [230, 730] : [340, 620];
+    const count = players.length;
+    const spawn = multi
+      ? Array.from({ length: count }, (_, i) => 150 + i * (660 / Math.max(1, count - 1)))
+      : game.mode === 'online' || !narrowScreen()
+        ? Array.from({ length: count }, (_, i) => 230 + i * (500 / Math.max(1, count - 1)))
+        : Array.from({ length: count }, (_, i) => 340 + i * (280 / Math.max(1, count - 1)));
     const spawnY = multi ? 470 : 355;
-    for (let i = 0; i < 2; i++) {
+    for (let i = 0; i < count; i++) {
       const p = players[i];
-      Object.assign(p, { characterId: game.picks[i], x: spawn[i], y: spawnY, vx: 0, vy: 0, facingX: i ? -1 : 1, facingY: 0, dashLeft: 0, dashHit: false, shieldLeft: 0, shieldHit: false, pulseLeft: 0, pullLeft: 0, warpLeft: 0, reboundLeft: 0, reboundX: 0, reboundY: 0, reboundPower: 0, trap: null, skillCooldown: 0, stunned: 0, blink: 0, walk: 0, aiDecision: i ? .5 + Math.random() * .6 : 0, wantsSkill: false, anim: i * 1.7, emotion: 'neutral', emotionLeft: 0, castLeft: 0, castTotal: .4, impactLeft: 0, celebrateLeft: 0 });
+      Object.assign(p, { characterId: game.picks[i], x: spawn[i], y: spawnY, vx: 0, vy: 0, facingX: i < count / 2 ? 1 : -1, facingY: 0, dashLeft: 0, dashHit: false, shieldLeft: 0, shieldHit: false, pulseLeft: 0, pullLeft: 0, warpLeft: 0, reboundLeft: 0, reboundX: 0, reboundY: 0, reboundPower: 0, trap: null, skillCooldown: 0, stunned: 0, blink: 0, walk: 0, aiDecision: i ? .5 + Math.random() * .6 : 0, wantsSkill: false, anim: i * 1.7, emotion: 'neutral', emotionLeft: 0, castLeft: 0, castTotal: .4, impactLeft: 0, celebrateLeft: 0 });
     }
   }
-
   function updateRuleHud() {
     const hud = $('rule-hud');
     const mashBar = $('mash-bar');
@@ -437,7 +451,7 @@
     game.lastImpact = null;
     game.playTipTime = game.round === 1 && game.mode !== 'demo' ? 4 : 0;
     $('play-tip').classList.toggle('show', game.playTipTime > 0);
-    game.capture = [0, 0];
+    game.capture = Array(players.length).fill(0);
     game.standoff = false;
     game.standoffTime = 0;
     game.standoffShown = false;
@@ -447,8 +461,8 @@
     let spots = seatLayout(game.matchSofas);
     for (let attempt = 0; attempt < 4 && game.matchSofas > 1 && seatSignature(spots) === game.lastSeatLayout; attempt++) spots = seatLayout(game.matchSofas);
     game.lastSeatLayout = seatSignature(spots);
-    game.seats = spots.map(([x, y]) => ({ x, y, capture: [0, 0], scale: 1 }));
-    const choices = RULE_IDS.filter(id => id !== game.previousRule);
+    game.seats = spots.map(([x, y]) => ({ x, y, capture: Array(players.length).fill(0), scale: 1 }));
+    const choices = RULE_IDS.filter(id => id !== game.previousRule && !(players.length > 2 && id === 'mash'));
     const ruleId = forcedRule || choices[Math.floor(Math.random() * choices.length)];
     game.rule = RULES[ruleId];
     game.previousRule = ruleId;
@@ -507,26 +521,35 @@
       const fresh = candidates.filter(id => id !== game.lastCpuPick);
       const pool = fresh.length ? fresh : candidates;
       const cpuPick = pool[Math.floor(Math.random() * pool.length)];
-      game.picks = [game.manualPicks[0], cpuPick];
       game.lastCpuPick = cpuPick;
+      const aiPicks = [cpuPick];
+      const aiPool = [...pool];
+      const wantedCount = Math.max(2, Math.min(4, game.localPlayerCount || 2));
+      while (aiPicks.length < wantedCount - 1 && aiPool.length) {
+        aiPicks.push(aiPool.splice(Math.floor(Math.random() * aiPool.length), 1)[0]);
+      }
+      game.picks = [game.manualPicks[0], ...aiPicks];
     } else {
       game.picks = [...game.manualPicks];
     }
     syncMode();
+    const matchPlayers = game.mode === 'cpu' || game.mode === 'chaos' ? Math.max(2, Math.min(4, game.localPlayerCount || 2)) : 2;
     // Demo matches rotate the sofa count so the showcase shows off every layout.
     // Chaos mode always uses a single sofa, only the sofa state changes.
-    game.matchSofas = game.mode === 'demo' ? 1 + Math.floor(Math.random() * 3) : game.mode === 'chaos' ? 1 : game.sofaCount;
+    game.matchSofas = game.mode === 'demo' ? 1 + Math.floor(Math.random() * 3) : (game.mode === 'cpu' || game.mode === 'chaos') && matchPlayers >= 4 ? 3 : (game.mode === 'cpu' || game.mode === 'chaos') && matchPlayers === 3 ? 2 : game.mode === 'chaos' ? 1 : game.sofaCount;
     document.body.classList.toggle('multi-sofa', game.matchSofas > 1);
-    game.scores = [0, 0];
-    game.combo = [0, 0];
-    game.maxCombo = [0, 0];
+    players = Array.from({ length: matchPlayers }, (_, i) => players[i] || makePlayer(i));
+    game.playerCount = matchPlayers;
+    game.scores = Array(matchPlayers).fill(0);
+    game.combo = Array(matchPlayers).fill(0);
+    game.maxCombo = Array(matchPlayers).fill(0);
     game.round = 0;
     game.tiedRounds = 0;
     game.ruleHistory = [];
-    game.mashCounts = [0, 0];
+    game.mashCounts = Array(matchPlayers).fill(0);
     game.morphT = 0; game.morphPhase = -1;
     game.chaosTimer = 0; game.chaosNext = 0;
-    game.mashWins = [0, 0];
+    game.mashWins = Array(matchPlayers).fill(0);
     game.morphT = 0; game.morphPhase = -1;
     game.previousRule = null;
     game.lastSeatLayout = '';
@@ -553,7 +576,7 @@
     $('play-tip').classList.remove('show');
     game.scores[winner]++;
     game.combo[winner]++;
-    game.combo[1 - winner] = 0;
+    for (let j = 0; j < players.length; j++) if (j !== winner) game.combo[j] = 0;
     game.maxCombo[winner] = Math.max(game.maxCombo[winner], game.combo[winner]);
     if (game.combo[winner] >= 2) {
       showBanner(`${CHARACTERS[game.picks[winner]].name} ${game.combo[winner]} 连击！`, 1.2);
@@ -567,18 +590,18 @@
     game.shake = .18;
     burst(spot.x, spot.y - 35, winner, 30);
     react(players[winner], 'happy', 2.8, true);
-    react(players[1 - winner], 'sad', 2.2);
+    for (const p of players) if (p.i !== winner) react(p, 'sad', 2.2);
     const name = CHARACTERS[game.picks[winner]].name;
     showBanner(reason === 'draw' ? `${name}赢得平局抽签！` : reason === 'mash' ? `${name}手速碾压！` : reason === 'closest' ? `${name}更近一步！` : reason === 'timeout' ? `${name}险胜！` : `${name}抢到了！`, 1.65);
     characterSound(players[winner], 'win');
-    characterSound(players[1 - winner], 'lose');
+    for (const p of players) if (p.i !== winner) characterSound(p, 'lose');
     updateHud();
   }
 
   function finishMatch() {
     game.phase = 'finished';
     document.body.classList.add('match-finished');
-    const winner = game.scores[0] > game.scores[1] ? 0 : 1;
+    const winner = game.scores.indexOf(Math.max(...game.scores));
     updateStats(winner);
     stopBackgroundMusic();
 
@@ -598,8 +621,8 @@
     $('result-rule').textContent = `最近规则：${game.ruleHistory.slice(-3).map(id => RULES[id].name).join(' → ')}`;
     const statsEl = $('result-stats');
     if (statsEl) {
-      const best = Math.max(game.maxCombo[0], game.maxCombo[1]);
-      statsEl.textContent = `本局之最：最高连击 ×${best}${game.mashWins ? ' · 角力 ' + (game.mashWins[0] + game.mashWins[1]) + ' 胜' : ''}`;
+      const best = Math.max(...game.maxCombo);
+      statsEl.textContent = `本局之最：最高连击 ×${best}${players.length > 2 ? ' · ' + game.scores.map((s, i) => `${CHARACTERS[game.picks[i]].name} ${s}分`).join(' · ') : game.mashWins ? ' · 角力 ' + (game.mashWins[0] + game.mashWins[1]) + ' 胜' : ''}`;
     }
     $('result-icon').textContent = winner === localWinner ? '🏆' : '🛋️';
     $('result-screen').classList.add('visible');
@@ -610,6 +633,7 @@
     document.querySelectorAll('.mode').forEach(btn => btn.classList.toggle('active', btn.dataset.mode === game.mode));
     const waitingForOpponent = (game.mode === 'cpu' || game.mode === 'chaos') && !document.body.classList.contains('in-match');
     $('start-btn').firstChild.textContent = game.mode === 'demo' ? '开始观看演示 ' : game.mode === 'online' ? '进入联网模式 ' : game.mode === 'chaos' ? '开始混沌抢沙发 ' : '开始抢沙发 ';
+    $('count-selector').hidden = !(game.mode === 'cpu' || game.mode === 'chaos');
     const local = localPlayerIndex();
     // Never dereference a partial network pick array while a lobby/match transition is rendering.
     const displayed = [0, 1].map(i => CHARACTERS[game.picks[i]] || CHARACTERS[game.manualPicks[i]] || CHARACTERS[CHARACTER_IDS[i]] || CHARACTERS[CHARACTER_IDS[0]]);
@@ -810,6 +834,28 @@
     $('timer').textContent = Math.max(0, Math.ceil(game.time));
     $('cap-a').style.width = `${Math.min(100, game.capture[0] / CAPTURE_SECONDS * 100)}%`;
     $('cap-b').style.width = `${Math.min(100, game.capture[1] / CAPTURE_SECONDS * 100)}%`;
+    const extra = $('score-extra');
+    if (extra) {
+      if (players.length > 2) {
+        extra.hidden = false;
+        while (extra.children.length < players.length - 2) {
+          const chip = document.createElement('div');
+          chip.className = 'score-chip';
+          chip.innerHTML = '<span class="dot"></span><small></small><strong>0</strong><div class="capture-track"><span></span></div>';
+          extra.appendChild(chip);
+        }
+        for (let i = 2; i < players.length; i++) {
+          const chip = extra.children[i - 2];
+          const character = CHARACTERS[game.picks[i]] || CHARACTERS[CHARACTER_IDS[0]];
+          chip.querySelector('.dot').style.background = character.color;
+          chip.querySelector('small').textContent = (game.mode === 'demo' ? '电脑' : '电脑') + '·' + character.name;
+          chip.querySelector('strong').textContent = game.scores[i] ?? 0;
+          chip.querySelector('.capture-track span').style.width = Math.min(100, (game.capture[i] || 0) / CAPTURE_SECONDS * 100) + '%';
+        }
+      } else {
+        extra.hidden = true;
+      }
+    }
     const localPlayer = players[localPlayerIndex()];
     $('dash-touch').classList.toggle('cooling', localPlayer.skillCooldown > 0);
     $('dash-touch').querySelector('small').textContent = localPlayer.skillCooldown > 0 ? `${localPlayer.skillCooldown.toFixed(1)}s` : '↗';
@@ -861,14 +907,16 @@
       // activation can no longer counter every attack for its full duration.
       victim.shieldLeft = Math.max(0, victim.shieldLeft - 0.75);
       attacker.dashLeft = 0;
+      const counterPower = CHARACTERS[victim.characterId].skill.counterPower || 400;
+      const counterVx = -dx * counterPower, counterVy = -dy * counterPower;
       const firstBlock = !victim.shieldCountered;
       victim.shieldCountered = true;
       if (firstBlock) {
         attacker.stunned = Math.max(attacker.stunned, .3);
         attacker.blink = .42;
         attacker.impactLeft = .32;
-        attacker.vx = -dx * CHARACTERS[victim.characterId].skill.counterPower;
-        attacker.vy = -dy * CHARACTERS[victim.characterId].skill.counterPower;
+        attacker.vx = counterVx;
+        attacker.vy = counterVy;
       } else {
         // Repeat blocks still deflect, but without the full counter punch.
         attacker.blink = .3;
@@ -931,14 +979,16 @@
     },
     pulse(p, skill) {
       p.pulseLeft = .32;
-      const other = players[1 - p.i];
-      if (dist(p, other) <= skill.radius) pushAway(p, other, skill.power, skill.stun);
+      for (const other of players) {
+        if (other === p) continue;
+        if (dist(p, other) <= skill.radius) pushAway(p, other, skill.power, skill.stun);
+      }
       burst(p.x, p.y, p.i, 20);
       tone(230, .2, 'triangle', .06);
     },
     blink(p, skill) {
       const from = { x: p.x, y: p.y };
-      const other = players[1 - p.i];
+      const other = nearestOpponent(p);
       const otherDistance = dist(p, other);
       const travel = otherDistance < skill.distance + 30 ? Math.max(0, otherDistance - 28) : skill.distance;
       const edge = playArea();
@@ -963,18 +1013,18 @@
     },
     pull(p, skill) {
       p.pullLeft = .34;
-      const other = players[1 - p.i];
-      if (dist(p, other) <= skill.radius && pushAway(p, other, -skill.power, skill.stun)) {
-        const distance = dist(p, other) || 1;
-        other.reboundLeft = skill.rebound;
-        other.reboundX = (other.x - p.x) / distance;
-        other.reboundY = (other.y - p.y) / distance;
-        other.reboundPower = skill.reboundPower;
+      for (const other of players) {
+        if (other === p) continue;
+        if (dist(p, other) <= skill.radius && pushAway(p, other, -skill.power, skill.stun)) {
+          const distance = dist(p, other) || 1;
+          other.reboundLeft = skill.rebound;
+          other.reboundX = (other.x - p.x) / distance;
+          other.reboundY = (other.y - p.y) / distance;
+          other.reboundPower = skill.reboundPower;
+        }
       }
-      burst(p.x, p.y, p.i, 12);
-      tone(310, .2, 'sine', .055);
-    },
-    trap(p, skill) {
+      },
+      trap(p, skill) {
       p.trap = { x: p.x, y: p.y + 12, left: skill.duration, arm: skill.arm, radius: skill.radius, stun: skill.stun };
       burst(p.x, p.y + 12, p.i, 10);
       tone(480, .11, 'triangle', .045);
@@ -983,7 +1033,7 @@
       // Vampire: lifesteal + brief invulnerability (bat form)
       p.vampireLeft = skill.duration;
       p.shieldLeft = Math.max(p.shieldLeft, skill.duration * 0.6); // Partial invulnerability
-      const other = players[1 - p.i];
+      const other = nearestOpponent(p);
       if (dist(p, other) <= 80) {
         // Lifesteal bite: blockable like every other disable, and it drains
         // part of the opponent's sofa-capture progress (吸取活力).
@@ -1021,7 +1071,7 @@
     },
     mage(p, skill) {
       // Mage: ranged magic projectile
-      const other = players[1 - p.i];
+      const other = nearestOpponent(p);
       const dx = other.x - p.x, dy = other.y - p.y;
       const distance = Math.hypot(dx, dy) || 1;
       p.mageProjectile = {
@@ -1120,7 +1170,7 @@
   // host (local presses + guest input flags), never on the guest client.
   function registerMash(p) {
     if (game.phase !== 'playing' || !game.rule || game.rule.id !== 'mash' || game.rulePhase !== 'active') return;
-    const other = players[1 - p.i];
+    const other = nearestOpponent(p);
     if (!other || dist(p, other) > game.rule.contactRange) return;
     game.mashCounts[p.i]++;
     burst(p.x, p.y - 26, p.i, 3);
@@ -1197,7 +1247,7 @@
   function inputFor(p, dt) {
     p.wantsSkill = false;
     if (game.mode === 'demo' || (p.i === 1 && (game.mode === 'cpu' || game.mode === 'chaos'))) {
-      const other = players[1 - p.i];
+      const other = nearestOpponent(p);
       const skill = CHARACTERS[p.characterId].skill;
       const enemyDistance = dist(p, other);
       const nearOther = enemyDistance < 145;
@@ -1370,21 +1420,14 @@
       p.knightLeft = Math.max(0, p.knightLeft - dt);
       p.knightHitCooldown = Math.max(0, (p.knightHitCooldown || 0) - dt);
       // Knight rotating sword: check collision with opponent (can hit multiple times)
-      const other = players[1 - p.i];
-      const distance = dist(p, other);
-      if (distance <= p.knightRadius && p.knightHitCooldown <= 0) {
-        // Set cooldown to prevent continuous hitting every frame
-        p.knightHitCooldown = 0.3;
-        // Route through pushAway so the sword respects shields, records the
-        // impact kind and syncs juice to the online guest like every other skill.
-        if (pushAway(p, other, p.knightPower || 380, p.knightStun || 0.6)) p.knightHitCooldown = 0.8;
+      for (const other of players) {
+        if (other === p) continue;
+        const distance = dist(p, other);
+        if (distance <= p.knightRadius && p.knightHitCooldown <= 0) {
+          p.knightHitCooldown = 0.3;
+          if (pushAway(p, other, p.knightPower || 380, p.knightStun || 0.6)) p.knightHitCooldown = 0.8;
+        }
       }
-      if (p.knightLeft <= 0) {
-        p.knightHit = false;
-        p.knightHitCooldown = 0;
-      }
-    }
-    if (p.ninjaLeft > 0) {
       p.ninjaLeft = Math.max(0, p.ninjaLeft - dt);
       if (p.ninjaClone) {
         p.ninjaClone.life -= dt;
@@ -1399,12 +1442,16 @@
       proj.x += proj.vx * dt;
       proj.y += proj.vy * dt;
       proj.life -= dt;
-      const other = players[1 - p.i];
-      if (dist({ x: proj.x, y: proj.y }, other) <= 30) {
-        // Route through pushAway so shields can block the bolt like any other hit.
-        pushAway(p, other, proj.power, proj.stun);
-        p.mageProjectile = null;
-      } else if (proj.life <= 0) {
+      for (const other of players) {
+        if (other === p) continue;
+        if (dist({ x: proj.x, y: proj.y }, other) <= 30) {
+          // Route through pushAway so shields can block the bolt like any other hit.
+          pushAway(p, other, proj.power, proj.stun);
+          p.mageProjectile = null;
+          break;
+        }
+      }
+      if (p.mageProjectile && p.mageProjectile.life <= 0) {
         p.mageProjectile = null;
       }
     }
@@ -1456,31 +1503,35 @@
   }
 
   function collide() {
-    const a = players[0], b = players[1];
-    const d = dist(a, b);
-    if (d >= 50) return;
-    const nx = (b.x - a.x) / (d || 1), ny = (b.y - a.y) / (d || 1);
-    const overlap = (50 - d) / 2;
-    a.x -= nx * overlap; a.y -= ny * overlap;
-    b.x += nx * overlap; b.y += ny * overlap;
-    // Juice for plain body squeezes: thud + shake + sparkle only. Physics
-    // stay byte-identical to the authored collision (a per-frame correction
-    // cap here was tried and nerfed dashing hard, so it stays untouched).
-    if (overlap > 6 && performance.now() - lastBumpAt > 280) {
-      lastBumpAt = performance.now();
-      tone(150 + Math.random() * 40, .07, 'square', .04, .7);
-      game.shake = Math.max(game.shake, .09);
-      burst((a.x + b.x) / 2, (a.y + b.y) / 2 - 10, a.i, 5);
-    }
-    const dashHits = [[a, b], [b, a]].filter(([attacker]) => attacker.dashLeft > 0 && !attacker.dashHit);
-    for (const [attacker, victim] of dashHits) {
-      attacker.dashHit = true;
-      pushAway(attacker, victim, CHARACTERS[attacker.characterId].skill.power, .36);
-    }
-    for (const [guard, other] of [[a, b], [b, a]]) {
-      if (guard.shieldLeft > 0 && !guard.shieldHit && other.dashLeft <= 0 && !(other.shieldLeft > 0 && !other.shieldHit)) {
-        guard.shieldHit = true;
-        pushAway(guard, other, CHARACTERS[guard.characterId].skill.counterPower, .26);
+    for (let pi = 0; pi < players.length; pi++) {
+      for (let pj = pi + 1; pj < players.length; pj++) {
+        const a = players[pi], b = players[pj];
+        const d = dist(a, b);
+        if (d >= 50) return;
+        const nx = (b.x - a.x) / (d || 1), ny = (b.y - a.y) / (d || 1);
+        const overlap = (50 - d) / 2;
+        a.x -= nx * overlap; a.y -= ny * overlap;
+        b.x += nx * overlap; b.y += ny * overlap;
+        // Juice for plain body squeezes: thud + shake + sparkle only. Physics
+        // stay byte-identical to the authored collision (a per-frame correction
+        // cap here was tried and nerfed dashing hard, so it stays untouched).
+        if (overlap > 6 && performance.now() - lastBumpAt > 280) {
+          lastBumpAt = performance.now();
+          tone(150 + Math.random() * 40, .07, 'square', .04, .7);
+          game.shake = Math.max(game.shake, .09);
+          burst((a.x + b.x) / 2, (a.y + b.y) / 2 - 10, a.i, 5);
+        }
+        const dashHits = [[a, b], [b, a]].filter(([attacker]) => attacker.dashLeft > 0 && !attacker.dashHit);
+        for (const [attacker, victim] of dashHits) {
+          attacker.dashHit = true;
+          pushAway(attacker, victim, CHARACTERS[attacker.characterId].skill.power, .36);
+        }
+        for (const [guard, other] of [[a, b], [b, a]]) {
+          if (guard.shieldLeft > 0 && !guard.shieldHit && other.dashLeft <= 0 && !(other.shieldLeft > 0 && !other.shieldHit)) {
+            guard.shieldHit = true;
+            pushAway(guard, other, CHARACTERS[guard.characterId].skill.counterPower, .26);
+          }
+        }
       }
     }
   }
@@ -1489,24 +1540,27 @@
     for (const owner of players) {
       const trap = owner.trap;
       if (!trap || trap.arm > 0) continue;
-      const victim = players[1 - owner.i];
-      if (dist(victim, trap) > trap.radius) continue;
-      if (victim.shieldLeft > 0 && !victim.shieldHit) {
-        victim.shieldHit = true;
-        react(victim, 'smug', .8);
-        game.lastImpact = { side: victim.i, kind: 'shield', time: game.time };
-        characterSound(victim, 'block');
-      } else {
-        victim.dashLeft = 0;
-        victim.vx = 0;
-        victim.vy = 0;
-        victim.stunned = Math.max(victim.stunned, trap.stun);
-        victim.blink = .45;
-        victim.impactLeft = .3;
-        react(victim, 'dizzy', trap.stun);
-        react(owner, 'happy', .7);
-        game.lastImpact = { side: owner.i, kind: 'trap', time: game.time };
-        characterSound(victim, 'hit');
+      for (const victim of players) {
+        if (victim.i === owner.i) continue;
+        if (dist(victim, trap) > trap.radius) continue;
+              if (victim.shieldLeft > 0 && !victim.shieldHit) {
+                victim.shieldHit = true;
+                react(victim, 'smug', .8);
+                game.lastImpact = { side: victim.i, kind: 'shield', time: game.time };
+                characterSound(victim, 'block');
+              } else {
+                victim.dashLeft = 0;
+                victim.vx = 0;
+                victim.vy = 0;
+                victim.stunned = Math.max(victim.stunned, trap.stun);
+                victim.blink = .45;
+                victim.impactLeft = .3;
+                react(victim, 'dizzy', trap.stun);
+                react(owner, 'happy', .7);
+                game.lastImpact = { side: owner.i, kind: 'trap', time: game.time };
+                characterSound(victim, 'hit');
+              }
+        break;
       }
       owner.trap = null;
       game.shake = .1;
@@ -1561,7 +1615,7 @@
       if (game.chaosTimer >= game.chaosNext) {
         game.chaosTimer = 0;
         game.chaosNext = 3 + Math.random() * 2;
-        const pool = RULE_IDS.filter(id => id !== (game.rule && game.rule.id));
+        const pool = RULE_IDS.filter(id => id !== (game.rule && game.rule.id) && !(players.length > 2 && id === 'mash'));
         const newId = pool[Math.floor(Math.random() * pool.length)];
         game.rule = RULES[newId];
         game.previousRule = newId;
@@ -1642,17 +1696,28 @@
     const seated = players.map(p => game.seats.some(seat => dist(p, seat) < CAPTURE_RADIUS * (seat.scale || 1) && p.stunned <= 0));
     let standoff = false;
     for (const seat of game.seats) {
-      const inside = players.map(p => dist(p, seat) < CAPTURE_RADIUS * (seat.scale || 1) && p.stunned <= 0);
-      if (inside[0] !== inside[1]) {
-        const i = inside[0] ? 0 : 1;
-        if (seated[1 - i]) { standoff = true; continue; }
+      const insideIdx = players.map((p, i) => dist(p, seat) < CAPTURE_RADIUS * (seat.scale || 1) && p.stunned <= 0 ? i : -1).filter(i => i >= 0);
+      if (players.length > 2) {
+        // Party mode: no cross-seat freeze — concurrent capture, first sofa filled wins.
+        if (insideIdx.length === 0) {
+          for (let j = 0; j < players.length; j++) seat.capture[j] = Math.max(0, seat.capture[j] - dt * .13);
+          continue;
+        }
+        for (const i of insideIdx) seat.capture[i] += dt;
+        for (let j = 0; j < players.length; j++) if (!insideIdx.includes(j)) seat.capture[j] = Math.max(0, seat.capture[j] - dt * .13);
+        const filled = insideIdx.filter(i => seat.capture[i] >= CAPTURE_SECONDS);
+        if (filled.length) { scorePoint(filled[Math.floor(Math.random() * filled.length)], 'capture', seat); break; }
+        continue;
+      }
+      if (insideIdx.length === 1) {
+        const i = insideIdx[0];
+        if (players.some((_, j) => j !== i && seated[j])) { standoff = true; continue; }
         seat.capture[i] += dt;
-        seat.capture[1 - i] = Math.max(0, seat.capture[1 - i] - dt * .35);
+        for (let j = 0; j < players.length; j++) if (j !== i) seat.capture[j] = Math.max(0, seat.capture[j] - dt * .35);
         if (seat.capture[i] >= CAPTURE_SECONDS) { scorePoint(i, 'capture', seat); break; }
-      } else if (!inside[0]) {
-        seat.capture[0] = Math.max(0, seat.capture[0] - dt * .13);
-        seat.capture[1] = Math.max(0, seat.capture[1] - dt * .13);
-      } else if (inside[0] && inside[1]) {
+      } else if (insideIdx.length === 0) {
+        for (let j = 0; j < players.length; j++) seat.capture[j] = Math.max(0, seat.capture[j] - dt * .13);
+      } else {
         standoff = true;
       }
     }
@@ -1665,23 +1730,27 @@
     game.capture = game.seats.reduce((best, seat) => [Math.max(best[0], seat.capture[0]), Math.max(best[1], seat.capture[1])], [0, 0]);
     // Capture heartbeat: as someone closes in on a point, a soft tick speeds up
     // the tension (throttled; audio only, zero gameplay effect).
-    const closingIn = Math.max(game.capture[0], game.capture[1]);
+    const closingIn = Math.max(...game.capture);
     if (closingIn > .9 && performance.now() - lastCaptureTickAt > (closingIn > 1.3 ? 260 : 420)) {
       lastCaptureTickAt = performance.now();
       tone(760 + Math.round(closingIn * 120), .045, 'square', .028);
     }
     if (game.time <= 0 && game.phase === 'playing' && game.seats.length) {
-      const totals = game.seats.reduce((sum, seat) => [sum[0] + seat.capture[0], sum[1] + seat.capture[1]], [0, 0]);
-      if (Math.abs(totals[0] - totals[1]) > .01) {
-        scorePoint(totals[0] > totals[1] ? 0 : 1, 'timeout');
+      const totals = players.map((_, i) => game.seats.reduce((sum, seat) => sum + seat.capture[i], 0));
+      const maxTotal = Math.max(...totals);
+      const leaders = totals.map((t, i) => ({ t, i })).filter(x => Math.abs(x.t - maxTotal) <= .01);
+      if (leaders.length === 1) {
+        scorePoint(leaders[0].i, 'timeout');
       } else {
         const distances = players.map(p => Math.min(...game.seats.map(seat => dist(p, seat))));
-        if (Math.abs(distances[0] - distances[1]) > 1) {
-          scorePoint(distances[0] < distances[1] ? 0 : 1, 'closest');
+        const minDistance = Math.min(...distances);
+        const closest = distances.map((d, i) => ({ d, i })).filter(x => Math.abs(x.d - minDistance) <= 1);
+        if (closest.length === 1) {
+          scorePoint(closest[0].i, 'closest');
         } else {
           game.tiedRounds++;
           if (game.tiedRounds >= 2) {
-            scorePoint(Math.random() < .5 ? 0 : 1, 'draw');
+            const fallback = closest.length ? closest[Math.floor(Math.random() * closest.length)].i : Math.floor(Math.random() * players.length);            scorePoint(fallback, 'draw');
           } else {
             game.phase = 'roundEnd'; game.wait = 1.5;
             game.playTipTime = 0;
@@ -3363,6 +3432,12 @@
     btn.addEventListener('click', () => {
       game.sofaCount = Math.max(1, Math.min(3, Number(btn.dataset.sofas) || 1));
       document.querySelectorAll('.sofa-btn').forEach(b => b.classList.toggle('active', b === btn));
+    });
+  });
+  document.querySelectorAll('.count-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      game.localPlayerCount = Math.max(2, Math.min(4, Number(btn.dataset.count) || 2));
+      document.querySelectorAll('.count-btn').forEach(b => b.classList.toggle('active', b === btn));
     });
   });
 

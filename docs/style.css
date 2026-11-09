@@ -438,3 +438,12 @@ body.desktop-mode .help-body section{border-color:#2a3350}
 .music-style-btn.active{background:#ff6c52;color:white;border-color:#ff6c52;box-shadow:0 2px 8px #ff6c5244}
 
 .match-stats{margin:2px 0 0;font-weight:700;color:#9c6b45;font-size:14px}
+
+/* N-player local match: extra score chips under the main scoreboard */
+.score-extra{display:flex;gap:8px;justify-content:center;padding:6px 0 2px;flex-wrap:wrap}
+.score-extra[hidden]{display:none}
+.score-chip{display:flex;align-items:center;gap:6px;padding:4px 10px;background:#f7eee5;border-radius:10px}
+.score-chip small{font-size:10px;font-weight:800;color:#756c69}
+.score-chip strong{font-size:15px;font-weight:900;color:#3c3430}
+.score-chip .capture-track{width:46px}
+.score-chip .dot{width:9px;height:9px;border-radius:50%;display:inline-block}

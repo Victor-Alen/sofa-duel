@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#faf3e9">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🛋️</text></svg>">
   <title>沙发只能坐一个 | 六角色多沙发版</title>
-  <link rel="stylesheet" href="style.css?v=15.6.9">
+  <link rel="stylesheet" href="style.css?v=15.7.0">
 </head>
 <body>
   <main class="shell">
@@ -16,7 +16,7 @@
     </header>
 
     <section class="intro">
-      <div><span class="eyebrow">谁才是这个家的主人？</span><h1>抢到沙发，<em>坐到最后。</em></h1><p>六名角色自由选，用专属技能逼开对手。独占 1.6 秒得分，先拿 3 分获胜。</p></div>
+      <div><span class="eyebrow">谁才是这个家的主人？</span><h1>抢到沙发，<em>坐到最后。</em></h1><p>十名角色自由选，用专属技能逼开对手。独占 1.6 秒得分，先拿 3 分获胜。</p></div>
       <div class="mode-switch" role="group" aria-label="游戏模式"><button class="mode active" data-mode="cpu">单人挑战</button><button class="mode" data-mode="chaos">混沌模式</button><button class="mode" data-mode="duo">本地双人</button><button class="mode" data-mode="online">联网对战</button><button class="mode" data-mode="demo">自动演示</button></div>
     </section>
 
@@ -26,7 +26,7 @@
       <div class="scoreboard">
         <div class="team team-a"><span class="avatar coral">●</span><div><small id="player-a-label">玩家一</small><strong id="score-a">0</strong></div><div class="capture-track"><span id="cap-a"></span></div></div>
         <div class="center-hud"><span id="status-label">准备开战</span><strong id="timer">18</strong><span class="sec">秒</span></div>
-        <div class="team team-b"><div class="capture-track"><span id="cap-b"></span></div><div><small id="player-b-label">沙发守卫</small><strong id="score-b">0</strong></div><span class="avatar blue">●</span></div>
+        <div class="team team-b"><div class="capture-track"><span id="cap-b"></span></div><div><small id="player-b-label">沙发守卫</small><strong id="score-b">0</strong></div><div id="score-extra" class="score-extra" hidden></div><span class="avatar blue">●</span></div>
       </div>
       <div class="canvas-frame">
         <canvas id="game" width="960" height="540" aria-label="游戏画面：两个人争夺房间中央的沙发"></canvas>
@@ -58,7 +58,7 @@
               <div class="difficulty-options">
                 <button class="difficulty-btn sofa-btn active" data-sofas="1">1 张</button>
                 <button class="difficulty-btn sofa-btn" data-sofas="3">3 张</button>
-              </div>
+              </div><div id="count-selector" class="difficulty-selector"><span class="difficulty-label">游玩人数</span><div class="difficulty-options"><button class="difficulty-btn count-btn active" data-count="2">2 人</button><button class="difficulty-btn count-btn" data-count="3">3 人</button><button class="difficulty-btn count-btn" data-count="4">4 人</button></div></div>
             </div>
             <div id="difficulty-selector" class="difficulty-selector">
               <span class="difficulty-label">AI 难度</span>
@@ -188,9 +188,9 @@
     <button id="poster-save" class="primary-btn" type="button" hidden>保存到相册</button>
     <p id="poster-status" role="status"></p>
   </dialog>
-  <script src="characters.js?v=15.6.9"></script>
-  <script src="rules.js?v=15.6.9"></script>
-  <script src="network.js?v=15.6.9"></script>
-  <script src="game.js?v=15.6.9"></script>
+  <script src="characters.js?v=15.7.0"></script>
+  <script src="rules.js?v=15.7.0"></script>
+  <script src="network.js?v=15.7.0"></script>
+  <script src="game.js?v=15.7.0"></script>
 </body>
 </html>
