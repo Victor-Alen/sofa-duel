@@ -1,6 +1,5 @@
 (() => {
   'use strict';
-
   const canvas = document.getElementById('game');
   // alpha:false: the game fills the full frame every tick, so the compositor
   // gets an opaque fast path (measurable on phones).
@@ -48,12 +47,10 @@
     // the outer seats stay visible, and players stay inside that band.
     return document.body.classList.contains('multi-sofa') ? [150, W - 150] : [300, 660];
   };
-
   // Apply desktop fullscreen mode automatically
   if (isDesktop()) {
     document.body.classList.add('desktop-mode');
   }
-
   // Listen for resize to toggle desktop mode
   window.addEventListener('resize', () => {
     if (isDesktop()) {
@@ -62,7 +59,6 @@
       document.body.classList.remove('desktop-mode');
     }
   });
-
   let players = [makePlayer(0), makePlayer(1)];
   const highlightPool = Array.from({ length: HIGHLIGHT_FRAME_COUNT }, () => {
     const frame = document.createElement('canvas');
@@ -81,12 +77,9 @@
   let last = performance.now();
   let lastBumpAt = 0;  // throttle the body-squeeze thud
   let lastCaptureTickAt = 0;  // throttle the capture heartbeat
-
   function makePlayer(i) {
     return { i, characterId: i ? 'guard' : 'dash', x: i ? 740 : 220, y: 360, vx: 0, vy: 0, facingX: i ? -1 : 1, facingY: 0, dashLeft: 0, dashHit: false, shieldLeft: 0, shieldHit: false, pulseLeft: 0, pullLeft: 0, warpLeft: 0, reboundLeft: 0, reboundX: 0, reboundY: 0, reboundPower: 0, trap: null, skillCooldown: 0, stunned: 0, blink: 0, walk: 0, aiDecision: 0, wantsSkill: false, anim: i * 1.7, emotion: 'neutral', emotionLeft: 0, castLeft: 0, castTotal: .4, impactLeft: 0, celebrateLeft: 0, vampireLeft: 0, knightLeft: 0, knightHit: false, knightRadius: 0, knightStun: 0, knightPower: 0, ninjaLeft: 0, ninjaClone: null, speedBoost: 0, mageProjectile: null };
   }
-
-
   function nearestOpponent(p) {
     let best = null, bestDistance = Infinity;
     for (const q of players) {
@@ -113,7 +106,6 @@
       osc.start(); osc.stop(ac.currentTime + duration);
     } catch (_) { /* Audio is optional. */ }
   }
-
   function characterSound(p, event) {
     const character = CHARACTERS[p.characterId];
     const settings = {
@@ -127,18 +119,15 @@
     tone(character.pitch * pitch, duration, character.wave, volume, slide);
     if (event === 'win') setTimeout(() => tone(character.pitch * 1.8, .16, 'triangle', .04, 1.12), 85);
   }
-
   function loadStats() {
     try {
       const saved = localStorage.getItem('sofa-duel-stats');
       return saved ? JSON.parse(saved) : { matches: 0, wins: 0, totalScore: 0, maxCombo: 0, achievements: [], fastestWin: Infinity };
     } catch (_) { return { matches: 0, wins: 0, totalScore: 0, maxCombo: 0, achievements: [], fastestWin: Infinity }; }
   }
-
   function saveStats() {
     try { localStorage.setItem('sofa-duel-stats', JSON.stringify(game.stats)); } catch (_) {}
   }
-
   function updateStats(winner, localIndex = 0) {
     const iWon = winner === localIndex;
     game.stats.matches++;
@@ -150,7 +139,6 @@
     checkAchievements();
     saveStats();
   }
-
   function checkAchievements() {
     const newAchievements = [];
     if (game.stats.matches >= 1 && !game.stats.achievements.includes('first-match')) newAchievements.push({ id: 'first-match', title: '初出茅庐', desc: '完成第一场比赛' });
@@ -165,7 +153,6 @@
     }
     if (!game.currentAchievement && game.achievementQueue.length > 0) showNextAchievement();
   }
-
   function showNextAchievement() {
     if (game.achievementQueue.length === 0) { game.currentAchievement = null; return; }
     const ach = game.achievementQueue.shift();
@@ -179,7 +166,6 @@
       setTimeout(() => showNextAchievement(), 400);
     }, 2800);
   }
-
   function startBackgroundMusic() {
     if (!game.audio || !musicOn || game.music) return;
     try {
@@ -198,7 +184,6 @@
       gain.gain.linearRampToValueAtTime(.28, ac.currentTime + 1.2);
       gain.connect(ac.destination);
       game.musicGain = gain;
-
       // Music styles: cheerful (轻快), energetic (激情), relaxed (舒缓)
       const styles = {
         cheerful: {
@@ -229,12 +214,10 @@
           bassWave: 'sine'
         }
       };
-
       const style = styles[musicStyle] || styles.cheerful;
       const beatDuration = 60 / style.tempo;
       let beatIndex = 0;
       let chordIndex = 0;
-
       const playNote = (freq, startTime, duration, type = 'sine', volume = .3) => {
         const osc = ac.createOscillator();
         const oscGain = ac.createGain();
@@ -247,29 +230,24 @@
         osc.start(startTime);
         osc.stop(startTime + duration);
       };
-
       const loopMusic = () => {
         if (!game.music) return;
         const now = ac.currentTime;
         const chord = style.chordProg[chordIndex % style.chordProg.length];
-
         // Play 8 beats per loop
         for (let i = 0; i < 8; i++) {
           const beatTime = now + i * beatDuration;
-
           // Bass line
           if (style.bassPattern[i]) {
             const bassFreq = style.scale[chord[0]] / 2;
             playNote(bassFreq, beatTime, beatDuration * .8, style.bassWave, .35);
           }
-
           // Chord pads
           if (i === 0) {
             for (const noteIdx of chord) {
               playNote(style.scale[noteIdx], beatTime, beatDuration * 7.5, style.wave, .15);
             }
           }
-
           // Melody
           if (style.melodyPattern[i]) {
             const melodyIdx = (chord[i % chord.length] + i) % style.scale.length;
@@ -277,24 +255,19 @@
             playNote(melodyFreq, beatTime, beatDuration * .6, style.wave, .22);
           }
         }
-
         chordIndex++;
         beatIndex += 8;
-
         // Dynamic tempo based on game state
         const heat = Math.max(game.combo[0], game.combo[1]);
     const suddenDeath = game.scores.filter(s => s === WIN_SCORE - 1).length >= 2;
         const tempoMult = suddenDeath ? .75 : heat >= 3 ? .8 : heat >= 2 ? .9 : 1;
         const loopDuration = beatDuration * 8 * 1000 * tempoMult;
-
         game.music = setTimeout(loopMusic, loopDuration);
       };
-
       game.music = 'playing';
       loopMusic();
     } catch (_) { game.music = null; }
   }
-
   function stopBackgroundMusic() {
     if (game.music) { clearTimeout(game.music); game.music = null; }
     if (game.musicGain) {
@@ -305,13 +278,11 @@
       } catch (_) { game.musicGain = null; }
     }
   }
-
   function react(p, emotion, seconds = .65, celebrate = false) {
     p.emotion = emotion;
     p.emotionLeft = seconds;
     if (celebrate) p.celebrateLeft = seconds;
   }
-
   function showBanner(text, seconds = 1) {
     game.bannerText = text;
     game.bannerTime = seconds;
@@ -320,7 +291,6 @@
     el.textContent = text;
     el.classList.add('show');
   }
-
   function resetPlayers() {
     const multi = game.seats.length > 1;
     const count = players.length;
@@ -366,21 +336,18 @@
     hud.dataset.phase = game.rulePhase;
     hud.classList.toggle('warning', game.rulePhase === 'warning');
   }
-
   function clearHighlight() {
     game.replay = null;
     game.highlightFrames = [];
     game.highlightClock = 0;
     $('replay-ui').hidden = true;
   }
-
   function skipReplay() {
     if (!game.replay) return;
     game.replay = null;
     $('replay-ui').hidden = true;
     game.wait = Math.min(game.wait, .9);
   }
-
   function highlightTitle(winner, reason) {
     const name = CHARACTERS[game.picks[winner]].name;
     if (reason === 'mash') return `${name}手速碾压！`;
@@ -398,24 +365,20 @@
     }
     return `${name}抢到了关键位置！`;
   }
-
   function startHighlight(winner, reason) {
     if (game.highlightFrames.length < 2) return;
     game.replay = { elapsed: 0, duration: HIGHLIGHT_SECONDS, title: highlightTitle(winner, reason) };
     $('replay-title').textContent = game.replay.title;
     $('replay-ui').hidden = false;
   }
-
   function seatLayout(count) {
     if (count <= 1) return [SINGLE_SEAT_SPOTS[Math.floor(Math.random() * SINGLE_SEAT_SPOTS.length)]];
     const layouts = count === 2 ? TWO_SEAT_LAYOUTS : THREE_SEAT_LAYOUTS;
     return layouts[Math.floor(Math.random() * layouts.length)].map(spot => [...spot]);
   }
-
   function seatSignature(spots) {
     return spots.map(spot => `${spot[0]}:${spot[1]}`).sort().join('|');
   }
-
   function nearestSeat(point) {
     let best = null, bestDistance = Infinity;
     for (const seat of game.seats) {
@@ -424,7 +387,6 @@
     }
     return best;
   }
-
   function seatTargetAwayFrom(index) {
     const pool = game.seats.length > 1 ? MULTI_SEAT_SPOTS : SINGLE_SEAT_SPOTS;
     const seat = game.seats[index];
@@ -444,7 +406,6 @@
     }
     return best;
   }
-
   function newRound() {
     game.round++;
     clearHighlight();
@@ -496,7 +457,6 @@
     updateRuleHud();
     updateHud();
   }
-
   function startMatch() {
     if (document.activeElement && typeof document.activeElement.blur === 'function') document.activeElement.blur();
     keys.clear();
@@ -533,7 +493,7 @@
       game.picks = [...game.manualPicks];
     }
     syncMode();
-    const matchPlayers = game.mode === 'cpu' || game.mode === 'chaos' ? Math.max(2, Math.min(4, game.localPlayerCount || 2)) : 2;
+    const matchPlayers = game.mode === 'cpu' || game.mode === 'chaos' ? Math.max(2, Math.min(4, game.localPlayerCount || 2)) : game.mode === 'online' ? Math.max(2, Math.min(4, onlineRoomSize || 2)) : 2;
     // Demo matches rotate the sofa count so the showcase shows off every layout.
     // Chaos mode always uses a single sofa, only the sofa state changes.
     game.matchSofas = game.mode === 'demo' ? 1 + Math.floor(Math.random() * 3) : (game.mode === 'cpu' || game.mode === 'chaos') && matchPlayers >= 4 ? 3 : (game.mode === 'cpu' || game.mode === 'chaos') && matchPlayers === 3 ? 2 : game.mode === 'chaos' ? 1 : game.sofaCount;
@@ -566,7 +526,6 @@
     tone(450, .13);
     startBackgroundMusic();
   }
-
   function scorePoint(winner, reason, seat) {
     if (game.phase !== 'playing') return;
     game.standoff = false;
@@ -597,14 +556,12 @@
     for (const p of players) if (p.i !== winner) characterSound(p, 'lose');
     updateHud();
   }
-
   function finishMatch() {
     game.phase = 'finished';
     document.body.classList.add('match-finished');
     const winner = game.scores.indexOf(Math.max(...game.scores));
     updateStats(winner);
     stopBackgroundMusic();
-
     // Keep the host snapshot loop alive for the final result, but never queue old input into a rematch.
     if (game.mode === 'online') {
       $('online-game-hud').hidden = true;
@@ -614,7 +571,6 @@
       stickEnd();
       $('again-btn').disabled = false;
     }
-
     const localWinner = game.mode === 'online' ? onlinePlayerNumber : 0;
     $('result-title').textContent = `${CHARACTERS[game.picks[winner]].name}霸占沙发！`;
     $('result-subtitle').textContent = game.mode === 'demo' ? '自动演示即将重新开始。' : winner === localWinner ? '这张沙发，今晚归你。' : game.mode === 'online' ? '惜败！点“再来一局”马上重赛。' : '再抢一次？';
@@ -628,7 +584,6 @@
     $('result-screen').classList.add('visible');
     if (game.mode === 'demo') game.wait = 3.5;
   }
-
   function syncMode() {
     document.querySelectorAll('.mode').forEach(btn => btn.classList.toggle('active', btn.dataset.mode === game.mode));
     const waitingForOpponent = (game.mode === 'cpu' || game.mode === 'chaos') && !document.body.classList.contains('in-match');
@@ -636,9 +591,16 @@
     $('count-selector').hidden = !(game.mode === 'cpu' || game.mode === 'chaos');
     const local = localPlayerIndex();
     // Never dereference a partial network pick array while a lobby/match transition is rendering.
-    const displayed = [0, 1].map(i => CHARACTERS[game.picks[i]] || CHARACTERS[game.manualPicks[i]] || CHARACTERS[CHARACTER_IDS[i]] || CHARACTERS[CHARACTER_IDS[0]]);
-    $('player-a-label').textContent = game.mode === 'online' ? `${local === 0 ? '你' : '对手'}·${displayed[0].name}` : `${game.mode === 'demo' ? '电脑' : '玩家一'}·${displayed[0].name}`;
-    $('player-b-label').textContent = waitingForOpponent ? '随机对手' : game.mode === 'online' ? `${local === 1 ? '你' : '对手'}·${displayed[1].name}` : `${game.mode === 'demo' || game.mode === 'cpu' || game.mode === 'chaos' ? '电脑' : '玩家二'}·${displayed[1].name}`;
+    const displayed = players.map((_, i) => CHARACTERS[game.picks[i]] || CHARACTERS[game.manualPicks[i]] || CHARACTERS[CHARACTER_IDS[i % CHARACTER_IDS.length]] || CHARACTERS[CHARACTER_IDS[0]]);
+    const ownCharacter = CHARACTERS[game.picks[localPlayerIndex()]] || displayed[0];
+    const firstOpponent = CHARACTERS[game.picks[1 - localPlayerIndex()]] || displayed[1];
+    $('player-a-label').textContent = game.mode === 'online'
+      ? (waitingForOpponent ? '你' : `你·${ownCharacter.name}`)
+      : `${game.mode === 'demo' ? '电脑' : '玩家一'}·${displayed[0].name}`;
+    $('player-b-label').textContent = waitingForOpponent ? '随机对手'
+      : game.mode === 'online'
+        ? (onlineRoomSize > 2 ? `对手 ×${onlineRoomSize - 1}` : `对手·${firstOpponent.name}`)
+        : `${game.mode === 'demo' || game.mode === 'cpu' || game.mode === 'chaos' ? '电脑' : '玩家二'}·${displayed[1].name}`;
     const enemySkill = displayed[1].skill;
     $('player-b-label').title = waitingForOpponent ? '本局对手角色随机' : `技能：${enemySkill.name} · ${enemySkill.description}`;
     for (let i = 0; i < 2; i++) {
@@ -674,7 +636,6 @@
       }
     }
   }
-
   function renderPickers() {
     for (let side = 0; side < 2; side++) {
       const container = $(side ? 'picker-b' : 'picker-a');
@@ -709,7 +670,6 @@
     $('skill-note-b').textContent = describe(second);
     $('skill-note-b').hidden = game.mode !== 'duo';
   }
-
   function returnToMenu(mode) {
     game.mode = mode;
     game.picks = [...game.manualPicks];
@@ -761,9 +721,7 @@
     updateHud();
     if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
   }
-
   function stopDemo() { returnToMenu('cpu'); }
-
   function togglePause() {
     if (game.mode === 'online' || !['playing', 'countdown', 'roundEnd'].includes(game.phase)) return;
     game.paused = !game.paused;
@@ -775,7 +733,6 @@
     $('pause-screen').classList.toggle('visible', game.paused);
     updateHud();
   }
-
   function enterFullscreen() {
     if (document.fullscreenElement) return;
     const wrap = document.querySelector('.game-wrap');
@@ -783,12 +740,10 @@
     if (request && typeof request.catch === 'function') request.catch(() => document.body.classList.add('presentation'));
     else document.body.classList.add('presentation');
   }
-
   function exitFullscreen() {
     if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
     document.body.classList.remove('presentation');
   }
-
   function makePoster() {
     const poster = document.createElement('canvas');
     poster.width = 1080; poster.height = 1440;
@@ -827,7 +782,6 @@
     $('poster-status').textContent = '';
     $('poster-dialog').showModal();
   }
-
   function updateHud() {
     $('score-a').textContent = game.scores[0];
     $('score-b').textContent = game.scores[1];
@@ -848,7 +802,7 @@
           const chip = extra.children[i - 2];
           const character = CHARACTERS[game.picks[i]] || CHARACTERS[CHARACTER_IDS[0]];
           chip.querySelector('.dot').style.background = character.color;
-          chip.querySelector('small').textContent = (game.mode === 'demo' ? '电脑' : '电脑') + '·' + character.name;
+          chip.querySelector('small').textContent = (game.mode === 'online' ? '对手' : '电脑') + '·' + character.name;
           chip.querySelector('strong').textContent = game.scores[i] ?? 0;
           chip.querySelector('.capture-track span').style.width = Math.min(100, (game.capture[i] || 0) / CAPTURE_SECONDS * 100) + '%';
         }
@@ -862,14 +816,13 @@
     $('status-label').textContent = game.paused ? '已暂停' : game.replay ? '高光回放' : game.phase === 'playing' ? '抢沙发中' : game.phase === 'countdown' ? '准备开战' : game.phase === 'roundEnd' ? '本回合结束' : game.mode === 'demo' ? '自动演示' : '先到 3 分获胜';
     // Guest watchdog: the local timer keeps ticking between snapshots, so a
     // silent host stall (locked screen, dropped network) must be visible.
-    if (game.mode === 'online' && onlinePlayerNumber === 1 && onlineState === 'playing'
+if (game.mode === 'online' && onlinePlayerNumber !== 0 && onlinePlayerNumber !== null && onlineState === 'playing'
         && onlineLastSnapshotAt && performance.now() - onlineLastSnapshotAt > 3000) {
       $('status-label').textContent = '对方网络不稳定…';
-    } else if (game.mode === 'online' && onlinePlayerNumber === 1 && onlineHostReplaying) {
+} else if (game.mode === 'online' && onlinePlayerNumber !== 0 && onlinePlayerNumber !== null && onlineHostReplaying) {
       $('status-label').textContent = '对手精彩回放中…';
     }
   }
-
   // All instructions live in one help dialog so the start screen and mobile layout stay clean.
   function renderHelp() {
     const ruleItems = RULE_IDS.map(id => {
@@ -895,7 +848,6 @@
       <section><h3>房间规则 · 每回合随机</h3>${ruleItems}</section>
       <section><h3>角色技能 · 每人只能用自己的技能</h3>${characterItems}</section>`;
   }
-
   function pushAway(attacker, victim, power, stun) {
     const distance = dist(attacker, victim);
     const dx = distance > 1 ? (victim.x - attacker.x) / distance : attacker.facingX;
@@ -959,7 +911,6 @@
     }
     return hit;
   }
-
   // Register one handler per skill kind; character balance lives in characters.js.
   const skillHandlers = {
     dash(p, skill) {
@@ -1087,18 +1038,16 @@
       tone(520, .14, 'triangle', .055, 1.2);
     }
   };
-
   function isAiPlayer(p) {
-    return game.mode === 'demo' || (p.i === 1 && (game.mode === 'cpu' || game.mode === 'chaos'));
+    if (game.mode === 'online') return false;
+    return game.mode === 'demo' || ((game.mode === 'cpu' || game.mode === 'chaos') && p.i >= 1 && p.i < (game.playerCount || 2));
   }
-
   // AI uses skills on a longer cooldown on lower difficulties, giving players more breathing room.
   function aiCooldownFactor(p) {
     if (!isAiPlayer(p)) return 1;
     const difficulty = game.difficulty || 'normal';
     return difficulty === 'easy' ? 1.45 : difficulty === 'normal' ? 1.2 : 1;
   }
-
   function useSkill(p, simultaneous = false) {
     if (game.phase !== 'playing' || game.paused || p.skillCooldown > 0 || (!simultaneous && p.stunned > 0)) return;
     const character = CHARACTERS[p.characterId];
@@ -1116,7 +1065,6 @@
     characterSound(p, 'skill');
     handler(p, skill);
   }
-
   const ruleHandlers = {
     shuffle(rule) {
       const index = game.ruleTarget && game.seats[game.ruleTarget.index] ? game.ruleTarget.index : Math.floor(Math.random() * game.seats.length);
@@ -1163,7 +1111,6 @@
       tone(190, .23, 'square', .045);
     }
   };
-
   // 贴身角力 (mash rule): while the rule is active and both players touch,
   // every skill-button press counts; the first side to reach the goal scores
   // a point and blasts the opponent away. Counting is authoritative on the
@@ -1188,9 +1135,8 @@
       [1, 1.25, 1.5].forEach((mult, i) => setTimeout(() => tone(523 * mult, .12, 'triangle', .05, 1.02), i * 90));
     }
   }
-
   function updateRoomRule(dt) {
-    if (onlinePlayerNumber === 1) return; // The host owns sofa movement in online matches.
+if (game.mode === 'online' && onlinePlayerNumber !== 0 && onlinePlayerNumber !== null) return; // The host owns sofa movement in online matches.
     if (!game.rule || game.rule.id === 'frenzy' || game.rule.id === 'mash' || game.rulePhase === 'triggered') return;
     if (game.rule.id === 'morph') {
       // 沙发变变变: cycle the sofa between small and large; the capture ring
@@ -1243,10 +1189,9 @@
       updateRuleHud();
     }
   }
-
   function inputFor(p, dt) {
     p.wantsSkill = false;
-    if (game.mode === 'demo' || (p.i === 1 && (game.mode === 'cpu' || game.mode === 'chaos'))) {
+    if (isAiPlayer(p)) {
       const other = nearestOpponent(p);
       const skill = CHARACTERS[p.characterId].skill;
       const enemyDistance = dist(p, other);
@@ -1271,12 +1216,10 @@
       const nearSeat = Boolean(targetSeat) && seatDistance < 86;
       const contested = Boolean(targetSeat) && dist(other, targetSeat) < CAPTURE_RADIUS;
       const hostileTrap = other.trap;
-
       // Difficulty-based parameters
       const difficulty = game.difficulty || 'normal';
       const reactionTime = difficulty === 'easy' ? 1 : difficulty === 'normal' ? .75 : .4;
       const aggression = difficulty === 'easy' ? 0.3 : difficulty === 'normal' ? 0.5 : 0.7;
-
       // Trap avoidance (all difficulties)
       if (hostileTrap && hostileTrap.arm <= 0 && dist(p, hostileTrap) < hostileTrap.radius + 24) {
         let avoidX = p.x - hostileTrap.x, avoidY = p.y - hostileTrap.y;
@@ -1284,7 +1227,6 @@
         if (avoidLength === 1 && avoidX === 0 && avoidY === 0) avoidX = p.i ? 1 : -1;
         return { x: avoidX / avoidLength, y: avoidY / avoidLength };
       }
-
       // Hard difficulty: predict opponent blink/teleport and place trap
       if (difficulty === 'hard' && other.warpLeft > 0 && p.characterId === 'trap' && !p.trap && p.skillCooldown <= 0) {
         const otherSkill = CHARACTERS[other.characterId].skill;
@@ -1301,7 +1243,6 @@
           }
         }
       }
-
       // Ninja shadow clone: bots sometimes mistake the clone for the real player
       // and chase it until it fades (re-rolled per decision window, not per frame).
       let chaseTarget = other;
@@ -1314,19 +1255,15 @@
       const length = Math.hypot(dx, dy);
       if (nearSeat && !nearOther && !contested) return { x: 0, y: 0 };
       if (length > 1) { dx /= length; dy /= length; }
-
       // Easy difficulty: add slight movement noise
       if (difficulty === 'easy' && Math.random() < 0.1) {
         dx += (Math.random() - 0.5) * 0.3;
         dy += (Math.random() - 0.5) * 0.3;
       }
-
       p.aiDecision -= dt;
       const opposingSkill = CHARACTERS[other.characterId].skill.kind;
-
       // Per-difficulty skill attempt chance (checked once per decision window, not per frame)
       const attemptChance = difficulty === 'easy' ? 0.2 : difficulty === 'normal' ? 0.35 : 0.7;
-
       // Smarter skill usage based on difficulty
       let useNow = false;
       if (p.aiDecision <= 0 && other.stunned <= 0 && p.skillCooldown <= 0) {
@@ -1358,7 +1295,6 @@
         } else {
           useNow = skill.radius != null && enemyDistance < skill.radius && Math.random() < attemptChance;
         }
-
         if (useNow) {
           const faceTarget = skill.kind === 'blink' ? target : other;
           const faceDistance = dist(p, faceTarget) || 1;
@@ -1376,14 +1312,30 @@
       }
       return { x: dx, y: dy };
     }
-    if (game.mode === 'online' && p.i === 1) {
-      // Input watchdog: a backgrounded/locked guest stops sending input, and
-      // without this their character would keep walking in the last direction.
-      const stale = onlineLastInputAt && performance.now() - onlineLastInputAt > 250;
-      if (stale) onlineOpponentInput.skill = false;
-      p.wantsSkill = stale ? false : onlineOpponentInput.skill;
-      onlineOpponentInput.skill = false;
-      return stale ? { x: 0, y: 0 } : { x: onlineOpponentInput.x, y: onlineOpponentInput.y };
+    if (game.mode === 'online' && p.i >= 1) {
+      if (onlinePlayerNumber === 0) {
+        // Host: every guest character walks with that guest's latest input,
+        // frozen (watchdog) when their device goes quiet mid-match.
+        const input = onlineGuestInputs[p.i - 1] || { x: 0, y: 0, skill: false };
+        const last = onlineLastInputAts[p.i - 1] || 0;
+        const stale = last && performance.now() - last > 250;
+        if (stale) input.skill = false;
+        p.wantsSkill = stale ? false : input.skill;
+        input.skill = false;
+        return stale ? { x: 0, y: 0 } : { x: input.x, y: input.y };
+      }
+      if (p.i === onlinePlayerNumber) {
+        // Guest predicts its own movement locally.
+        let x, y;
+        x = Number(keys.has('KeyD')) - Number(keys.has('KeyA')) + mobile.x;
+        y = Number(keys.has('KeyS')) - Number(keys.has('KeyW')) + mobile.y;
+        const length = Math.hypot(x, y);
+        if (length > 1) { x /= length; y /= length; }
+        return { x, y };
+      }
+      // Other guests are snapshot-interpolated; no local input.
+      p.wantsSkill = false;
+      return { x: 0, y: 0 };
     }
     let x, y;
     if (p.i === 0) {
@@ -1396,9 +1348,7 @@
     const length = Math.hypot(x, y);
     return length > 1 ? { x: x / length, y: y / length } : { x, y };
   }
-
   function dist(a, b) { return Math.hypot(a.x - b.x, a.y - b.y); }
-
   function updatePlayer(p, dt, move) {
     p.skillCooldown = Math.max(0, p.skillCooldown - dt);
     p.shieldLeft = Math.max(0, p.shieldLeft - dt);
@@ -1501,7 +1451,6 @@
       game.shake = Math.max(game.shake, .14);
     }
   }
-
   function collide() {
     for (let pi = 0; pi < players.length; pi++) {
       for (let pj = pi + 1; pj < players.length; pj++) {
@@ -1535,7 +1484,6 @@
       }
     }
   }
-
   function updateTraps() {
     for (const owner of players) {
       const trap = owner.trap;
@@ -1569,7 +1517,6 @@
       tone(205, .16, 'square', .04, .8);
     }
   }
-
   function burst(x, y, side, count) {
     // Mobile perf guard: cap the particle pool so long chaotic fights never
     // accumulate thousands of draw calls.
@@ -1581,7 +1528,6 @@
       game.particles.push({ x, y, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed - 80, life: .45 + Math.random() * .5, max: 1, size: 3 + Math.random() * 5, color: colors[i % colors.length] });
     }
   }
-
   function updatePresentation(dt) {
     for (const p of players) {
       p.anim += dt;
@@ -1592,9 +1538,8 @@
       if (!p.emotionLeft && p.emotion !== 'neutral') p.emotion = 'neutral';
     }
   }
-
   function update(dt) {
-    if (game.mode === 'online' && onlinePlayerNumber === 1 && onlineState === 'playing') {
+if (game.mode === 'online' && onlinePlayerNumber !== 0 && onlinePlayerNumber !== null && onlineState === 'playing') {
       updateOnlineClient(dt);
       return;
     }
@@ -1679,7 +1624,7 @@
     // by the chosen difficulty (easy = leisurely, hard = relentless).
     if (game.rule && game.rule.id === 'mash' && game.rulePhase === 'active') {
       for (const p of players) {
-        const isAi = game.mode === 'demo' || (p.i === 1 && (game.mode === 'cpu' || game.mode === 'chaos'));
+        const isAi = isAiPlayer(p);
         if (!isAi) continue;
         const other = players[1 - p.i];
         if (!other || dist(p, other) > (game.rule.contactRange || 52)) { p.mashTimer = 0; continue; }
@@ -1763,7 +1708,6 @@
     }
     updateHud();
   }
-
   function roundedPath(g, x, y, w, h, radius) {
     const r = Math.max(0, Math.min(radius, w / 2, h / 2));
     g.moveTo(x + r, y);
@@ -1773,9 +1717,7 @@
     g.lineTo(x, y + r); g.arcTo(x, y, x + r, y, r);
     g.closePath();
   }
-
   function roundRect(x, y, w, h, r, fill) { ctx.fillStyle = fill; ctx.beginPath(); roundedPath(ctx, x, y, w, h, r); ctx.fill(); }
-
   function drawRoom(now) {
     ctx.fillStyle = '#e8d7bb'; ctx.fillRect(0, 0, W, H);
     ctx.fillStyle = '#fff3dc'; ctx.fillRect(0, 0, W, 116);
@@ -1827,7 +1769,6 @@
     ctx.globalAlpha = .1; ctx.fillStyle = '#fff';
     ctx.beginPath(); ctx.ellipse(380, 190, 180, 30, -.15, 0, 7); ctx.fill(); ctx.globalAlpha = 1;
   }
-
   function drawPlant(x, y) {
     roundRect(x - 23, y + 28, 46, 48, 5, '#c78361');
     roundRect(x - 26, y + 25, 52, 12, 5, '#e29b73');
@@ -1837,12 +1778,10 @@
     }
     ctx.fillStyle = '#7eaa86'; ctx.beginPath(); ctx.ellipse(x - 4, y - 14, 18, 39, -.15, 0, 7); ctx.fill();
   }
-
   function drawSofa(now) {
     const ordered = game.seats.map((seat, index) => ({ seat, index })).sort((a, b) => a.seat.y - b.seat.y);
     for (const { seat, index } of ordered) drawSeat(seat, index, now);
   }
-
   function drawSeat(seat, index, now) {
     const { x, y } = seat;
     const pulse = Math.sin(now / 250 + index * .8) * 2;
@@ -1891,7 +1830,6 @@
     ctx.fillText(game.seats.length > 1 ? `SEAT ${index + 1}${frozen ? ' · 对峙' : ''}` : 'ONLY ONE SEAT', x, y - 54);
     ctx.restore();
   }
-
   function drawTraps(now) {
     for (const owner of players) {
       const trap = owner.trap;
@@ -1921,7 +1859,6 @@
       ctx.restore();
     }
   }
-
   function playerMood(p) {
     if (p.stunned > 0) return 'dizzy';
     if (p.emotionLeft > 0) return p.emotion;
@@ -1933,7 +1870,6 @@
     }
     return 'neutral';
   }
-
   function drawFace(p, mood) {
     const eyeY = -10;
     const lookX = Math.max(-1, Math.min(1, p.facingX)) * 1.2;
@@ -1977,7 +1913,6 @@
     else ctx.arc(0, -4, 3.5, .15, Math.PI - .15);
     ctx.stroke();
   }
-
   function drawAccessory(p) {
     const { dark, light } = CHARACTERS[p.characterId];
     if (p.characterId === 'dash') {
@@ -2019,7 +1954,6 @@
       ctx.beginPath(); ctx.arc(0, -38, 3, 0, 7); ctx.fill();
     }
   }
-
   function drawPlayer(p, now) {
     const character = CHARACTERS[p.characterId];
     const { color, dark, light } = character;
@@ -2174,18 +2108,16 @@
     }
     ctx.restore();
   }
-
   function captureHighlight(now) {
     // The online guest never plays replays (only the host scores points), so
     // recording frames there is pure wasted CPU on the latency-sensitive device.
-    if (game.mode === 'online' && onlinePlayerNumber === 1) return;
+if (game.mode === 'online' && onlinePlayerNumber !== 0 && onlinePlayerNumber !== null) return;
     if (game.phase !== 'playing' || now - game.highlightClock < 1000 / HIGHLIGHT_FPS) return;
     game.highlightClock = now;
     const frame = game.highlightFrames.length >= HIGHLIGHT_FRAME_COUNT ? game.highlightFrames.shift() : highlightPool[game.highlightFrames.length];
     frame.getContext('2d').drawImage(canvas, 0, 0, frame.width, frame.height);
     game.highlightFrames.push(frame);
   }
-
   let replayShade = null; // cached: identical every frame, allocation-free replays
   function renderHighlight() {
     const frames = game.highlightFrames;
@@ -2198,7 +2130,6 @@
     shade.addColorStop(0, '#20253455'); shade.addColorStop(.25, '#20253400'); shade.addColorStop(.75, '#20253400'); shade.addColorStop(1, '#20253466');
     ctx.fillStyle = shade; ctx.fillRect(0, 0, W, H);
   }
-
   // Mobile online players see the full arena squeezed into a tiny strip; a
   // player-following camera zooms the world drawing without touching physics,
   // inputs, or host sync. Desktop and local modes keep the plain full view.
@@ -2217,7 +2148,6 @@
     const y = Math.max(viewH / 2, Math.min(H - viewH / 2, targetY));
     return { scale, x, y };
   }
-
   function render(now) {
     ctx.clearRect(0, 0, W, H);
     if (game.replay && game.highlightFrames.length) {
@@ -2247,7 +2177,6 @@
     }
     captureHighlight(now);
   }
-
   function frame(now) {
     const dt = Math.min(.033, (now - last) / 1000 || .016);
     last = now;
@@ -2255,7 +2184,6 @@
     render(now);
     requestAnimationFrame(frame);
   }
-
   document.querySelectorAll('.mode').forEach(btn => btn.addEventListener('click', () => {
     if (game.mode === 'online' && btn.dataset.mode !== 'online') {
       // The mode switch is an exit affordance: honor it even mid-match,
@@ -2406,7 +2334,6 @@
   };
   document.addEventListener('click', resumeAudioOnInteraction, { once: true, capture: true });
   document.addEventListener('touchstart', resumeAudioOnInteraction, { once: true, capture: true });
-
   // Auto-rotate to landscape fullscreen on mobile when match starts
   const tryAutoLandscape = () => {
     if (!narrowScreen()) return; // Only on mobile
@@ -2460,7 +2387,6 @@
   });
   document.addEventListener('keyup', event => keys.delete(event.code));
   window.addEventListener('blur', () => { keys.clear(); stickEnd(); });
-
   const stick = $('joystick'), knob = $('joystick-knob');
   function stickMove(e) {
     if (game.paused || !['playing', 'countdown'].includes(game.phase)) return;
@@ -2521,17 +2447,18 @@
     btn.style.background = character.color;
     btn.style.borderBottomColor = character.dark;
   }
-
   // Online Multiplayer (PeerJS WebRTC)
   // The host runs the real match; the guest sends its input and renders host snapshots.
   let network = null;
   let onlineState = 'menu'; // menu | waiting | select | playing
   let onlineRoomCode = null;
   let onlinePlayerNumber = null; // 0 = host, 1 = guest
-  let onlineMyCharacter = null;
-  let onlineOpponentCharacter = null;
-  let onlineMyReady = false;
-  let onlineOpponentReady = false;
+let onlineRoomSize = 2;         // total seats including the host (2-4)
+let onlineCharacters = [];      // indexed by playerNumber: null | characterId
+let onlineReady = [];           // indexed by playerNumber
+let onlineGuestInputs = [];     // host side: per-guest input, indexed by playerNumber - 1
+let onlineRematchVotes = new Set();
+let onlineSeatConfirmed = false; // guest: welcome (seat assignment) received
   let onlineLobbyEpoch = 0;
   let onlineMatchId = 0;
   let onlineOperation = 0;
@@ -2544,12 +2471,11 @@
   let onlineEchoAt = -Infinity;  // host-side arrival time of that input
   let onlineLastSnapshotAt = 0;  // guest-side: last time a host snapshot arrived
   let onlineImpactQueue = [];    // host-side: impact events waiting to be synced
-  let onlineLastInputAt = 0;     // host-side: last guest input arrival (watchdog)
+let onlineLastInputAts = [];     // host-side: last input arrival per guest seat (watchdog)
   let guestHitStop = 0;          // guest-side: brief freeze on synced impacts
   let onlineHostReplaying = false; // guest-side: host is showing a highlight replay
   let onlineReconnectTimer = null; // host-side grace window for a dropped guest
-  let remoteInterpolation = freshInterpolation();
-
+let remoteInterpolations = []; // guest side: one interpolation state per remote player index
   function freshInterpolation() {
     return {
       prevX: 0, prevY: 0, prevVX: 0, prevVY: 0,
@@ -2557,34 +2483,30 @@
       interpTime: 0, interpDuration: .06, lastUpdateTime: 0
     };
   }
-
-  function localPlayerIndex() { return game.mode === 'online' && onlinePlayerNumber === 1 ? 1 : 0; }
+  function localPlayerIndex() { return game.mode === 'online' && onlinePlayerNumber ? onlinePlayerNumber : 0; }
   function onlineConnected() { return Boolean(network && network.isConnected()); }
-
   function localMoveVector() {
     const x = Number(keys.has('KeyD') || keys.has('ArrowRight')) - Number(keys.has('KeyA') || keys.has('ArrowLeft')) + mobile.x;
     const y = Number(keys.has('KeyS') || keys.has('ArrowDown')) - Number(keys.has('KeyW') || keys.has('ArrowUp')) + mobile.y;
     const length = Math.hypot(x, y);
     return length > 1 ? { x: x / length, y: y / length } : { x, y };
   }
-
   function sendOnlineInput(skill = false) {
-    if (!onlineConnected() || onlinePlayerNumber !== 1 || onlineState !== 'playing') return false;
+    if (!onlineConnected() || onlinePlayerNumber === 0 || onlinePlayerNumber === null || onlineState !== 'playing') return false;
     if (!['playing', 'countdown'].includes(game.phase)) return false;
     const move = localMoveVector();
-    network.send('input', { x: move.x, y: move.y, skill: Boolean(skill), matchId: onlineMatchId });
+    network.send('input', { x: move.x, y: move.y, skill: Boolean(skill), matchId: onlineMatchId, seat: onlinePlayerNumber });
     return true;
   }
-
   function useLocalSkill() {
     if (game.mode === 'demo') return;
     // 贴身角力: human presses count as mashes (host side counts its own; the
     // online guest's presses are counted by the host from the input message).
-    if (!(game.mode === 'online' && onlinePlayerNumber === 1)) registerMash(players[localPlayerIndex()]);
-    if (game.mode === 'online' && onlinePlayerNumber === 1) {
+    if (!(game.mode === 'online' && onlinePlayerNumber)) registerMash(players[localPlayerIndex()]);
+    if (game.mode === 'online' && onlinePlayerNumber) {
       // Send a skill press immediately instead of adding another input-tick of latency.
       if (game.phase === 'playing') {
-        const me = players[1];
+        const me = players[onlinePlayerNumber];
         const skill = CHARACTERS[me.characterId] && CHARACTERS[me.characterId].skill;
         if (skill && me.skillCooldown <= 0 && me.stunned <= 0) {
           // Optimistic cast feedback: show the gesture and play the sound now.
@@ -2600,12 +2522,12 @@
         // 贴身角力: the host counts authoritatively, but the guest should still
         // hear its own taps instantly (audio is per-device).
         if (game.rule && game.rule.id === 'mash' && game.rulePhase === 'active' && me.stunned <= 0) {
-          const other = players[0];
+          const other = nearestOpponent(me);
           if (other && dist(me, other) <= (game.rule.contactRange || 52)) {
-            tone(300 + Math.min((game.mashCounts[1] || 0) + 1, 14) * 26, .05, 'triangle', .035, 1.08);
+            tone(300 + Math.min((game.mashCounts[onlinePlayerNumber] || 0) + 1, 14) * 26, .05, 'triangle', .035, 1.08);
             // Optimistic meter: bump locally for instant feedback; the next
             // snapshot reconciles with the host's authoritative count.
-            game.mashCounts[1] = Math.min((game.mashCounts[1] || 0) + 1, game.rule.mashGoal);
+            game.mashCounts[onlinePlayerNumber] = Math.min((game.mashCounts[onlinePlayerNumber] || 0) + 1, game.rule.mashGoal);
             updateRuleHud();
           }
         }
@@ -2616,7 +2538,6 @@
     }
     useSkill(players[0]);
   }
-
   function updateConnectionStatus(status) {
     const el = $('connection-status');
     if (!el) return;
@@ -2628,7 +2549,6 @@
     const lagEl = $('lag-indicator');
     if (lagEl) lagEl.hidden = status !== 'connected';
   }
-
   function showOnlineScreen(message) {
     // If we're already in an online session (waiting/select/playing), clean up first
     if (onlineState !== 'menu' && onlineConnected()) {
@@ -2650,11 +2570,9 @@
     onlineState = 'menu';
     updateConnectionStatus('disconnected');
   }
-
   function hideAllScreens() {
     document.querySelectorAll('.screen').forEach(s => s.classList.remove('visible'));
   }
-
   function onlineErrorText(error, fallback) {
     if (!error) return fallback;
     if (typeof error === 'string') return error;
@@ -2669,7 +2587,6 @@
     };
     return messages[error.type] || error.message || fallback;
   }
-
   function prepareOnlineLobby() {
     const operation = ++onlineOperation;
     const previous = network;
@@ -2695,18 +2612,16 @@
     updateConnectionStatus('connecting');
     return { operation, session };
   }
-
   function isCurrentOnlineOperation(operation, session) {
     return operation === onlineOperation && network === session;
   }
-
   async function createRoom(preferredCode) {
     if (typeof preferredCode !== 'string' || preferredCode.length !== 6) preferredCode = undefined;  // click events etc.
     const { operation, session } = prepareOnlineLobby();
     $('room-code').textContent = preferredCode || '------';
     document.querySelector('.waiting-text').textContent = preferredCode ? '正在恢复房间…' : '正在创建房间…';
     try {
-      const result = await session.createRoom(preferredCode);
+      const result = await session.createRoom(preferredCode, onlineRoomSize);
       if (!isCurrentOnlineOperation(operation, session)) {
         await session.leaveRoom();
         return;
@@ -2718,21 +2633,20 @@
       document.querySelector('.waiting-text').textContent = preferredCode ? '房间已恢复，等待对手重连…' : '把 6 位房间号发给好友，等待加入…';
       try { sessionStorage.setItem('sofa-host-room', onlineRoomCode); } catch (_) {}
       updateConnectionStatus('connected');
-      session.onPlayerJoin = () => {
+      session.onPlayerJoin = seat => {
         if (!isCurrentOnlineOperation(operation, session)) return;
         if (onlineState !== 'waiting' && onlineState !== 'select') return;
         if (onlineReconnectTimer) { clearTimeout(onlineReconnectTimer); onlineReconnectTimer = null; }
         enterOnlineSelect();
-        // Publish the authoritative epoch so any guest (first join, refreshed
-        // page, or same-page rejoin) lands on the same counter.
-        network.send('lobby', { epoch: onlineLobbyEpoch });
+        // Assign the seat, then publish the authoritative lobby to everyone.
+        network.sendTo(seat, 'welcome', { playerNumber: seat, size: onlineRoomSize, epoch: onlineLobbyEpoch });
+        broadcastOnlineLobby();
       };
     } catch (error) {
       if (!isCurrentOnlineOperation(operation, session)) return;
       leaveOnlineRoom(onlineErrorText(error, '创建房间失败，请重试'));
     }
   }
-
   async function joinRoom() {
     const input = $('room-code-input').value;
     if (!input.trim()) {
@@ -2741,7 +2655,6 @@
     }
     await joinRoomByCode(input);
   }
-
   async function joinRoomByCode(input) {
     const { operation, session } = prepareOnlineLobby();
     $('room-code').textContent = '------';
@@ -2762,19 +2675,22 @@
       // page) converge on the host's counter instead of lockstep increments.
       network.send('hello', {});
     } catch (error) {
-      if (!isCurrentOnlineOperation(operation, session)) return;
+      if (!isCurrentOnlineOperation(operation, session)) {
+        await session.leaveRoom().catch(() => {});
+        return;
+      }
       leaveOnlineRoom(onlineErrorText(error, '加入房间失败，请重试'));
     }
   }
-
   function enterOnlineSelect(epoch) {
     if (Number.isInteger(epoch)) onlineLobbyEpoch = Math.max(onlineLobbyEpoch, epoch);
     else onlineLobbyEpoch++;
     onlineState = 'select';
-    onlineMyCharacter = null;
-    onlineOpponentCharacter = null;
-    onlineMyReady = false;
-    onlineOpponentReady = false;
+    onlineCharacters = Array(onlineRoomSize).fill(null);
+    onlineReady = Array(onlineRoomSize).fill(false);
+    onlineGuestInputs = Array(Math.max(0, onlineRoomSize - 1)).fill(null).map(() => ({ x: 0, y: 0, skill: false }));
+    onlineRematchVotes = new Set();
+    onlineSeatConfirmed = onlinePlayerNumber === 0;
     onlineOpponentInput = { x: 0, y: 0, skill: false };
     onlinePendingSkill = false;
     game.phase = 'menu';
@@ -2801,7 +2717,6 @@
     updateOnlineLobby();
     $('online-title').focus({ preventScroll: true });
   }
-
   function buildOnlinePicker() {
     const picker = $('online-picker');
     picker.innerHTML = '';
@@ -2818,76 +2733,112 @@
       picker.appendChild(btn);
     });
   }
-
+  function onlineConnectedSeats() {
+    const seats = [0];
+    if (network && network.playerNumber === 0) {
+      for (const entry of network.conns) if (entry.conn.open) seats.push(entry.playerNumber);
+    } else if (onlinePlayerNumber !== 0) {
+      seats.push(onlinePlayerNumber);
+    }
+    return seats;
+  }
+  function onlineLobbyReadyToStart() {
+    if (onlinePlayerNumber !== 0 || onlineState !== 'select') return false;
+    const connected = new Set(onlineConnectedSeats());
+    for (let seat = 0; seat < onlineRoomSize; seat++) {
+      if (!connected.has(seat)) return false;
+      if (!onlineCharacters[seat] || !onlineReady[seat]) return false;
+    }
+    return true;
+  }
+  function broadcastOnlineLobby() {
+    if (onlinePlayerNumber !== 0 || !onlineConnected()) return;
+    network.send('lobby', {
+      epoch: onlineLobbyEpoch,
+      size: onlineRoomSize,
+      characters: [...onlineCharacters],
+      ready: [...onlineReady],
+      connected: onlineConnectedSeats()
+    });
+  }
   function updateOnlineLobby() {
-    const ownName = onlineMyCharacter && CHARACTERS[onlineMyCharacter] ? CHARACTERS[onlineMyCharacter].name : '未选择';
-    const opponentName = onlineOpponentCharacter && CHARACTERS[onlineOpponentCharacter] ? CHARACTERS[onlineOpponentCharacter].name : '未选择';
-    $('online-p1-char').textContent = ownName;
-    $('online-p2-char').textContent = opponentName;
-    $('online-p1-ready').textContent = onlineMyReady ? '已准备' : '未准备';
-    $('online-p2-ready').textContent = onlineOpponentReady ? '已准备' : '未准备';
-    $('online-p1-status').classList.toggle('ready', onlineMyReady);
-    $('online-p2-status').classList.toggle('ready', onlineOpponentReady);
-    $('online-p1-status').querySelector(':scope > span').textContent = onlineMyReady ? '●' : '○';
-    $('online-p2-status').querySelector(':scope > span').textContent = onlineOpponentReady ? '●' : '○';
+    const myCharacter = onlineCharacters[onlinePlayerNumber];
+    const myReady = Boolean(onlineReady[onlinePlayerNumber]);
+    const container = $('online-lobby-players');
+    if (container) {
+      container.innerHTML = '';
+      const connected = new Set(onlineConnectedSeats());
+      for (let seat = 0; seat < onlineRoomSize; seat++) {
+        const mine = seat === onlinePlayerNumber;
+        const character = onlineCharacters[seat] && CHARACTERS[onlineCharacters[seat]] ? CHARACTERS[onlineCharacters[seat]].name : '未选择';
+        const ready = Boolean(onlineReady[seat]);
+        const row = document.createElement('div');
+        row.className = 'status-player' + (ready ? ' ready' : '');
+        const label = mine ? '你' : seat === 0 ? '房主' : `玩家${seat + 1}`;
+        const state = connected.has(seat) || mine ? '' : '（等待加入…）';
+        row.innerHTML = `<span>${ready ? '●' : '○'}</span><small>${label}${state}：<span>${character}</span></small><em>${ready ? '已准备' : '未准备'}</em>`;
+        container.appendChild(row);
+      }
+    }
     document.querySelectorAll('#online-picker .character-choice').forEach(btn => {
-      const selected = btn.dataset.character === onlineMyCharacter;
+      const selected = btn.dataset.character === myCharacter;
       btn.classList.toggle('selected', selected);
       btn.setAttribute('aria-pressed', String(selected));
-      btn.disabled = onlineMyReady;
+      btn.disabled = myReady;
     });
     const readyButton = $('online-ready-btn');
-    readyButton.disabled = !onlineMyCharacter || !onlineConnected();
-    readyButton.classList.toggle('is-ready', onlineMyReady);
-    readyButton.innerHTML = onlineMyReady ? '取消准备 <span>×</span>' : '准备好 <span>✓</span>';
-    document.querySelector('.select-hint').textContent = onlineMyReady && onlineOpponentReady
-      ? '双方已准备，即将开局…'
-      : onlineMyReady
-        ? '你已准备，等待对手点击“准备好”…'
-        : onlineOpponentReady
-          ? '对手已准备，请选角色并点击“准备好”'
-          : onlineMyCharacter
-            ? '角色已选好，点击“准备好”锁定角色'
-            : '请先选择角色，再点击“准备好”';
+    readyButton.disabled = !myCharacter || !onlineConnected() || !onlineSeatConfirmed;
+    readyButton.classList.toggle('is-ready', myReady);
+    readyButton.innerHTML = myReady ? '取消准备 <span>×</span>' : '准备好 <span>✓</span>';
+    const connectedCount = onlineConnectedSeats().length;
+    const everyoneReady = onlineCharacters.every((c, idx) => c && onlineReady[idx]);
+    document.querySelector('.select-hint').textContent = !onlineSeatConfirmed
+      ? '正在同步房间信息…'
+      : connectedCount < onlineRoomSize
+        ? `等待玩家加入（${connectedCount}/${onlineRoomSize}）…`
+        : everyoneReady
+          ? '全员已准备，即将开局…'
+          : myReady
+            ? '你已准备，等待其他人点击“准备好”…'
+            : onlineCharacters.some((c, idx) => idx !== onlinePlayerNumber && c)
+              ? '其他人已选好角色，点击“准备好”锁定你的选择'
+              : '请先选择角色，再点击“准备好”';
   }
-
   function selectOnlineCharacter(characterId) {
-    if (onlineState !== 'select' || onlineMyReady || !CHARACTERS[characterId]) return;
-    onlineMyCharacter = characterId;
+    if (onlineState !== 'select' || onlineReady[onlinePlayerNumber] || !CHARACTERS[characterId] || !onlineSeatConfirmed) return;
+    onlineCharacters[onlinePlayerNumber] = characterId;
     game.manualPicks[localPlayerIndex()] = characterId;
     game.picks[localPlayerIndex()] = characterId;
-    if (onlineConnected()) network.send('characterSelect', { character: characterId, epoch: onlineLobbyEpoch });
+    if (onlineConnected()) network.send('characterSelect', { character: characterId, epoch: onlineLobbyEpoch, seat: onlinePlayerNumber });
+    if (onlinePlayerNumber === 0) broadcastOnlineLobby();
     updateOnlineLobby();
   }
-
   function toggleOnlineReady() {
-    if (onlineState !== 'select' || !onlineConnected() || !onlineMyCharacter) return;
-    onlineMyReady = !onlineMyReady;
-    network.send('playerReady', { ready: onlineMyReady, character: onlineMyCharacter, epoch: onlineLobbyEpoch });
+    if (onlineState !== 'select' || !onlineConnected() || !onlineSeatConfirmed) return;
+    if (!onlineCharacters[onlinePlayerNumber]) return;
+    onlineReady[onlinePlayerNumber] = !onlineReady[onlinePlayerNumber];
+    network.send('playerReady', { ready: onlineReady[onlinePlayerNumber], character: onlineCharacters[onlinePlayerNumber], epoch: onlineLobbyEpoch, seat: onlinePlayerNumber });
+    if (onlinePlayerNumber === 0) broadcastOnlineLobby();
     updateOnlineLobby();
     maybeStartOnlineMatch();
   }
-
   function maybeStartOnlineMatch() {
-    if (onlinePlayerNumber !== 0 || onlineState !== 'select') return;
-    if (!onlineMyCharacter || !onlineOpponentCharacter || !onlineMyReady || !onlineOpponentReady) return;
-    startOnlineMatch();
+    if (onlineLobbyReadyToStart()) startOnlineMatch();
   }
-
   function startOnlineMatch() {
     if (onlinePlayerNumber !== 0 || !onlineConnected()) return;
-    const fromLobby = onlineState === 'select' && onlineMyCharacter && onlineOpponentCharacter && onlineMyReady && onlineOpponentReady;
+    const fromLobby = onlineState === 'select' && onlineLobbyReadyToStart();
     const fromResult = onlineState === 'playing' && game.phase === 'finished';
     if (!fromLobby && !fromResult) return;
     stopOnlineLoop();
     onlineMatchId++;
     onlineState = 'playing';
     game.mode = 'online';
-    game.manualPicks = [onlineMyCharacter, onlineOpponentCharacter];
+    game.manualPicks = [...onlineCharacters];
     game.picks = [...game.manualPicks];
     hideAllScreens();
     $('online-game-hud').hidden = false;
-    $('online-opponent-name').textContent = `对手 · ${CHARACTERS[onlineOpponentCharacter].name}`;
+    $('online-opponent-name').textContent = onlineRoomSize > 2 ? `对手 ×${onlineRoomSize - 1}` : `对手 · ${CHARACTERS[onlineCharacters[1]] ? CHARACTERS[onlineCharacters[1]].name : ''}`;
     $('again-btn').disabled = false;
     onlineOpponentInput = { x: 0, y: 0, skill: false };
     startMatch();
@@ -2897,19 +2848,19 @@
       if (onlineConnected() && onlineState === 'playing') network.send('gameState', { state: buildOnlineSnapshot() });
     }, 50);
   }
-
   function beginOnlineClientMatch(picks, sofaCount, matchId, epoch) {
-    if (onlinePlayerNumber !== 1 || !Array.isArray(picks) || picks.length !== 2 || !picks.every(id => typeof id === 'string' && CHARACTERS[id])) return;
+    if (onlinePlayerNumber === 0 || onlinePlayerNumber === null || !Array.isArray(picks) || picks.length < 2 || picks.length > 4 || !picks.every(id => typeof id === 'string' && CHARACTERS[id])) return;
     if (!Number.isInteger(matchId) || matchId <= onlineMatchId || epoch !== onlineLobbyEpoch) return;
-    const fromLobby = onlineState === 'select' && onlineMyCharacter && onlineOpponentCharacter;
+    onlineRoomSize = Math.max(2, Math.min(4, picks.length));
+    const fromLobby = onlineState === 'select' && onlineSeatConfirmed && Boolean(onlineCharacters[onlinePlayerNumber]);
     const fromResult = onlineState === 'playing' && game.phase === 'finished';
     // Accept new match even if we haven't reached finished yet (fast rematch race)
     const fromPlaying = onlineState === 'playing' && matchId > onlineMatchId + 1;
     if (!fromLobby && !fromResult && !fromPlaying) return;
     // Accept gameStart even if we cancelled ready (race condition): host already started
-    if (fromLobby && !onlineMyReady) {
+    if (fromLobby && !onlineReady[onlinePlayerNumber]) {
       // Auto-ready to sync with host's state
-      onlineMyReady = true;
+      onlineReady[onlinePlayerNumber] = true;
     }
     onlineMatchId = matchId;
     onlineState = 'playing';
@@ -2918,22 +2869,25 @@
     game.manualPicks = [...picks];
     game.sofaCount = Math.max(1, Math.min(3, Number(sofaCount) || 1));
     game.matchSofas = game.sofaCount;
-    game.scores = [0, 0];
-    game.combo = [0, 0];
-    game.maxCombo = [0, 0];
+    const matchPlayers = picks.length;
+    players = Array.from({ length: matchPlayers }, (_, i2) => players[i2] || makePlayer(i2));
+    game.playerCount = matchPlayers;
+    game.scores = Array(matchPlayers).fill(0);
+    game.combo = Array(matchPlayers).fill(0);
+    game.maxCombo = Array(matchPlayers).fill(0);
     game.round = 0;
     game.ruleHistory = [];
-    game.mashCounts = [0, 0];
+    game.mashCounts = Array(matchPlayers).fill(0);
     game.morphT = 0; game.morphPhase = -1;
     game.chaosTimer = 0; game.chaosNext = 0;
-    game.mashWins = [0, 0];
+    game.mashWins = Array(matchPlayers).fill(0);
     game.morphT = 0; game.morphPhase = -1;
     game.rule = null;
     game.rulePhase = 'idle';
     game.ruleTarget = null;
     game.ruleMove = null;
     game.seats = [];
-    game.capture = [0, 0];
+    game.capture = Array(matchPlayers).fill(0);
     game.standoff = false;
     game.standoffTime = 0;
     game.standoffShown = false;
@@ -2950,7 +2904,7 @@
     onlineLastSnapshotAt = 0;
     guestHitStop = 0;
     onlineHostReplaying = false;
-    remoteInterpolation = freshInterpolation();
+    remoteInterpolations = Array.from({ length: matchPlayers }, () => freshInterpolation());
     clearHighlight();
     resetPlayers();
     hideAllScreens();
@@ -2973,7 +2927,6 @@
       if (sendOnlineInput(onlinePendingSkill)) onlinePendingSkill = false;
     }, 33);
   }
-
   function buildOnlineSnapshot() {
     return {
       matchId: onlineMatchId,
@@ -3010,19 +2963,19 @@
       echo: performance.now() - onlineEchoAt < 600 ? onlineEchoTimestamp : null,
       replaying: Boolean(game.replay),
       impacts: onlineImpactQueue.splice(0, onlineImpactQueue.length),
-      result: game.phase === 'finished' ? { winner: game.scores[0] > game.scores[1] ? 0 : 1 } : null
+      result: game.phase === 'finished' ? { winner: game.scores.indexOf(Math.max(...game.scores)) } : null
     };
   }
-
   function applyOnlineSnapshot(state) {
-    if (!state || onlineState !== 'playing' || state.matchId !== onlineMatchId) return;
-    if (!['countdown', 'playing', 'roundEnd', 'finished'].includes(state.phase)) return;
-    if (!Number.isInteger(state.round) || !Number.isFinite(state.time)) return;
-    if (!Array.isArray(state.scores) || state.scores.length !== 2 || !state.scores.every(Number.isFinite)) return;
-    if (!Array.isArray(state.players) || state.players.length !== 2 || !state.players.every(p => p && CHARACTERS[p.characterId] && Number.isFinite(p.x) && Number.isFinite(p.y))) return;
-    if (state.rule && !RULES[state.rule]) return;
-    if (state.seats && (!Array.isArray(state.seats) || state.seats.length > 3 || !state.seats.every(seat => seat && Number.isFinite(seat.x) && Number.isFinite(seat.y) && Array.isArray(seat.capture) && seat.capture.length === 2))) return;
-    if (state.result && ![0, 1].includes(state.result.winner)) return;
+    const rejectSnap = why => { if (window.__snapRejects) window.__snapRejects.push(why); };
+    if (!state || onlineState !== 'playing' || state.matchId !== onlineMatchId) return rejectSnap('R1:if (!state || onlineState !== playing || state.matchId !==');
+    if (!['countdown', 'playing', 'roundEnd', 'finished'].includes(state.phase)) return rejectSnap('R2:if (![countdown, playing, roundEnd, finished].includ');
+    if (!Number.isInteger(state.round) || !Number.isFinite(state.time)) return rejectSnap('R3:if (!Number.isInteger(state.round) || !Number.isFinite(state');
+    if (!Array.isArray(state.scores) || state.scores.length !== state.players.length || !state.scores.every(Number.isFinite)) return rejectSnap('R4:if (!Array.isArray(state.scores) || state.scores.length !== ');
+    if (!Array.isArray(state.players) || state.players.length < 2 || state.players.length > 4) return rejectSnap('R5:if (!Array.isArray(state.players) || state.players.length < ');
+    if (state.rule && !RULES[state.rule]) return rejectSnap('R6:if (state.rule && !RULES[state.rule]) return;');
+    if (state.seats && (!Array.isArray(state.seats) || state.seats.length > 3 || !state.seats.every(seat => seat && Number.isFinite(seat.x) && Number.isFinite(seat.y) && Array.isArray(seat.capture) && seat.capture.length === state.players.length))) return rejectSnap('R7:if (state.seats && (!Array.isArray(state.seats) || state.sea');
+    if (state.result && (!Number.isInteger(state.result.winner) || state.result.winner < 0 || state.result.winner >= state.players.length)) return rejectSnap('R8:if (state.result && (!Number.isInteger(state.result.winner) ');
     if (state.sofaCount) {
       game.matchSofas = Math.max(1, Math.min(3, Number(state.sofaCount) || 1));
       document.body.classList.toggle('multi-sofa', game.matchSofas > 1);
@@ -3031,7 +2984,7 @@
     game.round = state.round;
     game.phase = state.phase;
     game.scores = [...state.scores];
-    if (Array.isArray(state.mash) && state.mash.length === 2) game.mashCounts = [...state.mash];
+    if (Array.isArray(state.mash) && state.mash.length === state.players.length) game.mashCounts = [...state.mash];
     if (Array.isArray(state.impacts)) {
       for (const imp of state.impacts) {
         if (!imp || !Number.isFinite(imp.x) || !Number.isFinite(imp.y)) continue;
@@ -3066,16 +3019,22 @@
       game.standoffTime = 0;
       onlinePendingSkill = false;
       resetPlayers();
-      remoteInterpolation = freshInterpolation();
+      remoteInterpolations = Array.from({ length: state.players.length }, () => freshInterpolation());
     }
     onlineHostReplaying = Boolean(state.replaying);
     if (Array.isArray(state.players)) {
-      // Guest predicts its own movement between snapshots; the other player is interpolated.
-      const remote = state.players[0];
-      const mine = state.players[1];
-      if (mine) applySnapshotPlayer(players[1], mine, true, roundChanged);
-      if (remote) {
-        const p = players[0];
+      // Guest predicts its own movement between snapshots; every other player is interpolated.
+      const mineIdx = onlinePlayerNumber;
+      const mine = state.players[mineIdx];
+      if (mine && players[mineIdx]) applySnapshotPlayer(players[mineIdx], mine, true, roundChanged);
+      const now = performance.now();
+      for (let idx = 0; idx < state.players.length; idx++) {
+        if (idx === mineIdx) continue;
+        const remote = state.players[idx];
+        const p = players[idx];
+        if (!remote || !p) continue;
+        if (!remoteInterpolations[idx]) remoteInterpolations[idx] = freshInterpolation();
+        const interp = remoteInterpolations[idx];
         p.characterId = remote.characterId;
         p.stunned = remote.stunned;
         p.shieldLeft = remote.shieldLeft;
@@ -3087,28 +3046,17 @@
         p.facingY = remote.facingY;
         p.emotion = remote.emotion;
         p.trap = remote.trap ? { ...remote.trap } : null;
-        const now = performance.now();
-        if (remoteInterpolation.lastUpdateTime === 0 || roundChanged) {
-          remoteInterpolation.prevX = remote.x;
-          remoteInterpolation.prevY = remote.y;
-          remoteInterpolation.prevVX = remote.vx;
-          remoteInterpolation.prevVY = remote.vy;
-          p.x = remote.x;
-          p.y = remote.y;
+        if (interp.lastUpdateTime === 0 || roundChanged) {
+          interp.prevX = remote.x; interp.prevY = remote.y; interp.prevVX = remote.vx; interp.prevVY = remote.vy;
+          p.x = remote.x; p.y = remote.y;
         } else {
-          const measuredInterval = (now - remoteInterpolation.lastUpdateTime) / 1000;
-          remoteInterpolation.interpDuration = Math.max(.035, Math.min(.1, measuredInterval * 1.1));
-          remoteInterpolation.prevX = p.x;
-          remoteInterpolation.prevY = p.y;
-          remoteInterpolation.prevVX = p.vx;
-          remoteInterpolation.prevVY = p.vy;
+          const measuredInterval = (now - interp.lastUpdateTime) / 1000;
+          interp.interpDuration = Math.max(.035, Math.min(.1, measuredInterval * 1.1));
+          interp.prevX = p.x; interp.prevY = p.y; interp.prevVX = p.vx; interp.prevVY = p.vy;
         }
-        remoteInterpolation.targetX = remote.x;
-        remoteInterpolation.targetY = remote.y;
-        remoteInterpolation.targetVX = remote.vx;
-        remoteInterpolation.targetVY = remote.vy;
-        remoteInterpolation.interpTime = 0;
-        remoteInterpolation.lastUpdateTime = now;
+        interp.targetX = remote.x; interp.targetY = remote.y; interp.targetVX = remote.vx; interp.targetVY = remote.vy;
+        interp.interpTime = 0;
+        interp.lastUpdateTime = now;
       }
     }
     game.time = state.time;
@@ -3120,7 +3068,6 @@
     if (state.phase === 'finished' && state.result) presentOnlineResult(state.result.winner);
     updateHud();
   }
-
   function applySnapshotPlayer(p, snap, isLocal, snapPosition) {
     const locallyStunned = p.stunned > 0;
     p.characterId = snap.characterId;
@@ -3154,7 +3101,6 @@
       p.facingY = snap.facingY;
     }
   }
-
   function updateOnlineClient(dt) {
     if (guestHitStop > 0) {
       // Classic impact freeze: hold the frame briefly so the hit lands.
@@ -3171,7 +3117,7 @@
     for (const p of game.particles) { p.life -= dt; p.vy += 210 * dt; p.x += p.vx * dt; p.y += p.vy * dt; }
     if (game.phase === 'playing') game.time = Math.max(0, game.time - dt);
     updateRemoteInterpolation(dt);
-    if (game.phase === 'playing') updatePlayer(players[1], dt, localMoveVector());
+    if (game.phase === 'playing' && players[onlinePlayerNumber]) updatePlayer(players[onlinePlayerNumber], dt, localMoveVector());
     if (game.phase === 'playing') {
       const lagEl = $('lag-indicator');
       if (lagEl) {
@@ -3182,22 +3128,24 @@
     }
     updateHud();
   }
-
   function updateRemoteInterpolation(dt) {
-    if (onlinePlayerNumber !== 1 || onlineState !== 'playing') return;
-    const p = players[0];
-    if (!p || remoteInterpolation.lastUpdateTime === 0) return;
-    remoteInterpolation.interpTime += dt;
-    const t = Math.min(1, remoteInterpolation.interpTime / remoteInterpolation.interpDuration);
-    const eased = t * t * (3 - 2 * t);
-    p.x = remoteInterpolation.prevX + (remoteInterpolation.targetX - remoteInterpolation.prevX) * eased;
-    p.y = remoteInterpolation.prevY + (remoteInterpolation.targetY - remoteInterpolation.prevY) * eased;
-    p.vx = remoteInterpolation.prevVX + (remoteInterpolation.targetVX - remoteInterpolation.prevVX) * eased;
-    p.vy = remoteInterpolation.prevVY + (remoteInterpolation.targetVY - remoteInterpolation.prevVY) * eased;
+    if (game.mode !== 'online' || onlinePlayerNumber === 0 || onlinePlayerNumber === null || onlineState !== 'playing') return;
+    for (let idx = 0; idx < players.length; idx++) {
+      if (idx === onlinePlayerNumber) continue;
+      const p = players[idx];
+      const interp = remoteInterpolations[idx];
+      if (!p || !interp || interp.lastUpdateTime === 0) continue;
+      interp.interpTime += dt;
+      const t = Math.min(1, interp.interpTime / interp.interpDuration);
+      const eased = t * t * (3 - 2 * t);
+      p.x = interp.prevX + (interp.targetX - interp.prevX) * eased;
+      p.y = interp.prevY + (interp.targetY - interp.prevY) * eased;
+      p.vx = interp.prevVX + (interp.targetVX - interp.prevVX) * eased;
+      p.vy = interp.prevVY + (interp.targetVY - interp.prevVY) * eased;
+    }
   }
-
   function presentOnlineResult(winner) {
-    if (![0, 1].includes(winner) || $('result-screen').classList.contains('visible')) return;
+    if (!Number.isInteger(winner) || winner < 0 || winner >= players.length || $('result-screen').classList.contains('visible')) return;
     stopOnlineLoop();
     onlinePendingSkill = false;
     keys.clear();
@@ -3216,18 +3164,19 @@
     $('result-icon').textContent = iWon ? '🏆' : '🛋️';
     $('result-screen').classList.add('visible');
   }
-
   function requestOnlineRematch() {
     if (onlineState !== 'playing' || game.phase !== 'finished') return;
     if (onlinePlayerNumber === 0) {
-      startOnlineMatch();
+      onlineRematchVotes.add(0);
+      const connectedSeats = [0, ...network.conns.filter(entry => entry.conn.open).map(entry => entry.playerNumber)];
+      if (connectedSeats.every(seat => onlineRematchVotes.has(seat))) { startOnlineMatch(); return; }
+      $('result-subtitle').textContent = `等待其他玩家点击“再来一局”（${onlineRematchVotes.size}/${players.length}）…`;
     } else if (onlineConnected()) {
-      network.send('rematch', { matchId: onlineMatchId });
+      network.send('rematch', { matchId: onlineMatchId, seat: onlinePlayerNumber });
       $('again-btn').disabled = true;
       $('result-subtitle').textContent = '已请求再来一局，等待房主开始…';
     }
   }
-
   function backToOnlineSelect(notify) {
     if (!['playing', 'select'].includes(onlineState)) return;
     const nextEpoch = onlineLobbyEpoch + 1;
@@ -3235,55 +3184,92 @@
     clearHighlight();
     enterOnlineSelect(nextEpoch);
   }
-
   function handleOnlineMessage(data) {
+    if (window.__msgLog && window.__msgLog.length < 300) window.__msgLog.push((data && data.type || '?') + (data && Number.isInteger(data.seat) ? ':' + data.seat : ''));
     if (!data || !data.type) return;
     switch (data.type) {
       case 'hello':
-        // A (re)joining guest asks for the host's authoritative lobby epoch.
+        // A (re)joining guest asks for the host's authoritative lobby state.
         if (onlinePlayerNumber === 0 && onlineState === 'select' && onlineConnected()) {
-          network.send('lobby', { epoch: onlineLobbyEpoch });
+          broadcastOnlineLobby();
         }
         break;
       case 'lobby':
-        if (onlinePlayerNumber === 1 && onlineState === 'select' && Number.isInteger(data.epoch)
-            && data.epoch >= onlineLobbyEpoch) {
+        if (onlinePlayerNumber !== 0 && onlineState === 'select' && Number.isInteger(data.epoch)
+            && data.epoch >= onlineLobbyEpoch && Array.isArray(data.characters) && Array.isArray(data.ready)) {
           onlineLobbyEpoch = data.epoch;
+          onlineRoomSize = Math.max(2, Math.min(4, Number(data.size) || 2));
+          onlineCharacters = data.characters.slice(0, onlineRoomSize);
+          while (onlineCharacters.length < onlineRoomSize) onlineCharacters.push(null);
+          onlineReady = data.ready.slice(0, onlineRoomSize).map(Boolean);
+          onlineSeatConfirmed = true;
+          while (onlineReady.length < onlineRoomSize) onlineReady.push(false);
           updateOnlineLobby();
         }
         break;
+      case 'welcome':
+        if (onlinePlayerNumber !== 0 && Number.isInteger(data.playerNumber)) {
+          onlinePlayerNumber = data.playerNumber;
+          onlineRoomSize = Math.max(2, Math.min(4, Number(data.size) || 2));
+          onlineSeatConfirmed = true;
+          if (Number.isInteger(data.epoch)) onlineLobbyEpoch = Math.max(onlineLobbyEpoch, data.epoch);
+          updateOnlineLobby();
+        }
+        break;
+      case 'roomFull':
+        if (onlinePlayerNumber !== 0) leaveOnlineRoom('房间已满，稍后再试');
+        break;
       case 'characterSelect':
         if (onlineState !== 'select' || data.epoch !== onlineLobbyEpoch || !CHARACTERS[data.character]) return;
-        if (onlineOpponentCharacter !== data.character) onlineOpponentReady = false;
-        onlineOpponentCharacter = data.character;
+        if (onlinePlayerNumber !== 0 || !Number.isInteger(data.seat) || data.seat < 1 || data.seat >= onlineRoomSize) return;
+        if (onlineCharacters[data.seat] !== data.character) onlineReady[data.seat] = false;
+        onlineCharacters[data.seat] = data.character;
+        broadcastOnlineLobby();
         updateOnlineLobby();
         maybeStartOnlineMatch();
         break;
       case 'playerReady':
         if (onlineState !== 'select' || data.epoch !== onlineLobbyEpoch || typeof data.ready !== 'boolean') return;
-        if (!onlineOpponentCharacter || data.character !== onlineOpponentCharacter) return;
-        onlineOpponentReady = data.ready;
+        if (onlinePlayerNumber !== 0 || !Number.isInteger(data.seat) || data.seat < 1 || data.seat >= onlineRoomSize) return;
+        if (data.character && CHARACTERS[data.character]) onlineCharacters[data.seat] = data.character;
+        onlineReady[data.seat] = data.ready;
+        broadcastOnlineLobby();
         updateOnlineLobby();
         maybeStartOnlineMatch();
         break;
+        if (onlinePlayerNumber === 0 && onlineState === 'select' && onlineConnected()) {
+          network.send('lobby', { epoch: onlineLobbyEpoch });
+        }
+        break;
+      case 'lobby':
+if (onlinePlayerNumber !== 0 && onlinePlayerNumber !== null && onlineState === 'select' && Number.isInteger(data.epoch)
+            && data.epoch >= onlineLobbyEpoch) {
+          onlineLobbyEpoch = data.epoch;
+          updateOnlineLobby();
+        }
+        break;
       case 'gameStart':
-        if (onlinePlayerNumber === 1) beginOnlineClientMatch(data.picks, data.sofaCount, data.matchId, data.epoch);
+        if (onlinePlayerNumber !== 0 && onlinePlayerNumber !== null) beginOnlineClientMatch(data.picks, data.sofaCount, data.matchId, data.epoch);
         break;
       case 'input':
         if (onlinePlayerNumber === 0 && onlineState === 'playing' && data.matchId === onlineMatchId && ['playing', 'countdown'].includes(game.phase)) {
+          const seat = Number(data.seat);
+          if (!Number.isInteger(seat) || seat < 1 || seat >= players.length) break;
           let x = Number(data.x), y = Number(data.y);
           if (!Number.isFinite(x)) x = 0;
           if (!Number.isFinite(y)) y = 0;
           const length = Math.hypot(x, y);
           if (length > 1) { x /= length; y /= length; }
-          onlineOpponentInput = { x, y, skill: onlineOpponentInput.skill || Boolean(data.skill) };
-          if (data.skill) registerMash(players[1]);
+          const input = onlineGuestInputs[seat - 1] || (onlineGuestInputs[seat - 1] = { x: 0, y: 0, skill: false });
+          input.x = x; input.y = y; input.skill = input.skill || Boolean(data.skill);
+          if (data.skill) registerMash(players[seat]);
           if (Number.isFinite(data.timestamp)) { onlineEchoTimestamp = data.timestamp; onlineEchoAt = performance.now(); }
-          onlineLastInputAt = performance.now();
+          onlineLastInputAts[seat - 1] = performance.now();
         }
         break;
+        break;
       case 'gameState':
-        if (onlinePlayerNumber === 1 && onlineState === 'playing') {
+if (onlinePlayerNumber !== 0 && onlinePlayerNumber !== null && onlineState === 'playing') {
           onlineLastSnapshotAt = performance.now();
           // Prefer the echoed input timestamp: both sides use the guest clock, so
           // this measures true input->state latency without cross-device skew.
@@ -3293,36 +3279,44 @@
         }
         break;
       case 'rematch':
-        if (onlinePlayerNumber === 0 && onlineState === 'playing' && game.phase === 'finished' && data.matchId === onlineMatchId) startOnlineMatch();
+        if (onlinePlayerNumber === 0 && onlineState === 'playing' && game.phase === 'finished' && data.matchId === onlineMatchId) {
+          const voter = Number(data.seat);
+          if (Number.isInteger(voter) && voter >= 1 && voter < players.length) onlineRematchVotes.add(voter);
+          const connectedSeats = [0, ...network.conns.filter(entry => entry.conn.open).map(entry => entry.playerNumber)];
+          if (connectedSeats.every(seat => seat === 0 || onlineRematchVotes.has(seat))) startOnlineMatch();
+        }
+        break;
         break;
       case 'backToSelect': {
         if (!Number.isInteger(data.epoch) || data.epoch < onlineLobbyEpoch || data.epoch > onlineLobbyEpoch + 1) return;
         if (data.epoch === onlineLobbyEpoch && onlineState === 'select') return;
         enterOnlineSelect(data.epoch);
         break;
+        if (onlinePlayerNumber === 0) broadcastOnlineLobby();
       }
       case 'leave':
-        handlePeerLeave();
+        handlePeerLeave(data.seat);
         break;
     }
   }
-
-  function handlePeerLeave() {
+  function handlePeerLeave(seat) {
     if (!network) return;
-    // Unexpected drops get one reconnect path; intentional leaves tear the
-    // session down before this fires, so they never reach here.
-    if (onlinePlayerNumber === 0 && (onlineState === 'select' || onlineState === 'playing')) {
+    if (onlinePlayerNumber !== 0 && (onlineState === 'select' || onlineState === 'playing')) {
+      startGuestRejoin();
+      return;
+    }
+    if (onlinePlayerNumber === 0 && onlineState === 'select') {
       startHostReconnectWait();
       return;
     }
-    if (onlinePlayerNumber === 1 && (onlineState === 'select' || onlineState === 'playing')) {
-      startGuestRejoin();
+    if (onlinePlayerNumber === 0 && onlineState === 'playing') {
+      // Another seat dropped mid-match: standard 20s rejoin window, then the room closes (v1).
+      startHostReconnectWait();
       return;
     }
     const message = onlineState === 'playing' ? '对手已离开，本局结束' : '对手已断开连接';
     leaveOnlineRoom(message);
   }
-
   function startHostReconnectWait() {
     stopOnlineLoop();
     // Keep the room open on a fresh select screen; if the guest refreshes, it
@@ -3336,7 +3330,6 @@
       }
     }, 20000);
   }
-
   async function startGuestRejoin() {
     const code = onlineRoomCode;
     if (!code) { leaveOnlineRoom('连接已断开'); return; }
@@ -3346,9 +3339,13 @@
       if (onlineState === 'menu' || operation !== onlineOperation) return; // user backed out
       try {
         await joinRoomByCode(code);
-        if (operation !== onlineOperation || onlineState === 'menu') {
+      if (operation !== onlineOperation || onlineState === 'menu') {
+        // A newer operation (user create/join) already owns `network` — and its
+        // prepareOnlineLobby tore this attempt's session down. Do not clobber it.
+        if (operation === onlineOperation) {
           // The user left while this attempt was in flight and the join still
           // succeeded: drop the room immediately or they would be yanked back
+        }
           // into the lobby against their will.
           const stale = network; network = null;
           if (stale) { stale.onData = null; stale.onPlayerJoin = null; stale.onPlayerLeave = null; stale.leaveRoom().catch(() => {}); }
@@ -3360,14 +3357,12 @@
     }
     if (operation === onlineOperation) leaveOnlineRoom('与对手的连接已断开，请重新加入房间');
   }
-
   function stopOnlineLoop() {
     if (onlineGameInterval) {
       clearInterval(onlineGameInterval);
       onlineGameInterval = null;
     }
   }
-
   async function leaveOnlineRoom(message) {
     ++onlineOperation;
     if (onlineReconnectTimer) { clearTimeout(onlineReconnectTimer); onlineReconnectTimer = null; }
@@ -3382,15 +3377,15 @@
     onlinePlayerNumber = null;
     onlineRoomCode = null;
     try { sessionStorage.removeItem('sofa-host-room'); } catch (_) {}
-    onlineMyCharacter = null;
-    onlineOpponentCharacter = null;
-    onlineMyReady = false;
-    onlineOpponentReady = false;
+    onlineCharacters = Array(onlineRoomSize).fill(null);
+    onlineReady = Array(onlineRoomSize).fill(false);
+    onlineGuestInputs = [];
+    onlineSeatConfirmed = false;
     onlineLobbyEpoch = 0;
     onlineMatchId = 0;
-    onlineOpponentInput = { x: 0, y: 0, skill: false };
+    onlineGuestInputs = Array(Math.max(0, players.length - 1)).fill(null).map(() => ({ x: 0, y: 0, skill: false }));    onlineRematchVotes = new Set();
     onlinePendingSkill = false;
-    remoteInterpolation = freshInterpolation();
+    remoteInterpolations = [];
     networkLag = 0;
     onlineEchoTimestamp = 0;
     onlineEchoAt = -Infinity;
@@ -3419,7 +3414,6 @@
       try { await oldNetwork.leaveRoom(); } catch (_) {}
     }
   }
-
   // Difficulty and sofa-count selectors
   document.querySelectorAll('.difficulty-btn[data-difficulty]').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -3440,13 +3434,18 @@
       document.querySelectorAll('.count-btn').forEach(b => b.classList.toggle('active', b === btn));
     });
   });
-
+  document.querySelectorAll('.size-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      onlineRoomSize = Math.max(2, Math.min(4, Number(btn.dataset.size) || 2));
+      document.querySelectorAll('.size-btn').forEach(b => b.classList.toggle('active', b === btn));
+    });
+  });
   // Online button event listeners
   $('create-room-btn').addEventListener('click', () => createRoom());
   $('join-room-btn').addEventListener('click', joinRoom);
   $('online-ready-btn').addEventListener('click', toggleOnlineReady);
   $('online-leave-btn').addEventListener('click', () => {
-    if (onlineConnected()) network.send('leave', {});
+    if (onlineConnected()) network.send('leave', { seat: onlinePlayerNumber });
     leaveOnlineRoom('你已离开房间');
   });
   $('room-code-input').addEventListener('keypress', e => {
@@ -3490,11 +3489,9 @@
     if (onlineState === 'menu') returnToMenu('cpu');
     else leaveOnlineRoom();
   });
-
   syncMode();
   resetPlayers();
   updateHud();
-
   // Host refresh recovery: reopening the page reopens the same room, so a
   // refresh no longer kills the match for both players. The guest rejoin
   // loop (20s grace on their side) will find this room again.
@@ -3527,10 +3524,16 @@
           state: onlineState, playerNumber: onlinePlayerNumber, roomCode: onlineRoomCode,
           mode: game.mode, phase: game.phase, round: game.round, scores: [...game.scores],
           picks: [...game.picks], rule: game.rule && game.rule.id,
-          myCharacter: onlineMyCharacter, opponentCharacter: onlineOpponentCharacter,
-          myReady: onlineMyReady, opponentReady: onlineOpponentReady,
+          characters: [...onlineCharacters],
+          ready: [...onlineReady],
+          roomSize: onlineRoomSize,
+          connectedSeats: onlineConnectedSeats(),
+          myCharacter: onlineCharacters[onlinePlayerNumber] ?? null,
+          opponentCharacter: onlineCharacters[onlinePlayerNumber === 0 ? 1 : 0] ?? null,
+          myReady: Boolean(onlineReady[onlinePlayerNumber]),
+          opponentReady: Boolean(onlineReady[onlinePlayerNumber === 0 ? 1 : 0]),
           epoch: onlineLobbyEpoch, matchId: onlineMatchId, pendingSkill: onlinePendingSkill,
-          bounds: playArea(), interpolationDuration: remoteInterpolation.interpDuration,
+          bounds: playArea(), interpolationDuration: remoteInterpolations[0] ? remoteInterpolations[0].interpDuration : 0,
           seats: game.seats.map(seat => ({ x: seat.x, y: seat.y, capture: [...seat.capture], scale: seat.scale || 1 })),
           morphT: game.morphT || 0, morphPhase: game.morphPhase, rulePhase: game.rulePhase,
           musicActive: Boolean(game.music),
@@ -3542,7 +3545,7 @@
       receiveOnline(data) { handleOnlineMessage(data); },
       finishOnline(winner = 0) {
         if (game.mode !== 'online' || onlinePlayerNumber !== 0) throw new Error('Only the online host can finish a bench match');
-        game.scores = winner === 0 ? [WIN_SCORE, 0] : [0, WIN_SCORE];
+        game.scores = game.scores.map((_, index) => index === winner ? WIN_SCORE : 0);
         finishMatch();
       },
       run(first, second, maxTicks = 12000) {
@@ -3576,7 +3579,6 @@
           game.paused = false;
           resetPlayers();
         };
-
         prepare('blink', 'guard');
         players[0].x = 200;
         players[0].y = 300;
@@ -3588,7 +3590,6 @@
         game.time = 4;
         game.lastImpact = { side: 0, kind: 'blink', time: 5 };
         results.highlightTitle = { ok: highlightTitle(0, 'capture') === '这一闪，刚刚好！', title: highlightTitle(0, 'capture') };
-
         prepare('magnet', 'dash');
         players[0].x = 400;
         players[0].y = 300;
@@ -3598,7 +3599,6 @@
         const pullVelocity = players[1].vx;
         updatePlayer(players[1], .2, { x: 0, y: 0 });
         results.pull = { ok: pullVelocity < 0 && players[1].vx > 0 && players[1].stunned > 0, pullVelocity, reboundVelocity: players[1].vx, stun: players[1].stunned };
-
         prepare('trap', 'dash');
         players[0].x = 400;
         players[0].y = 300;
@@ -3610,7 +3610,6 @@
         updatePlayer(players[0], players[0].trap.arm + .01, { x: 0, y: 0 });
         updateTraps();
         results.trap = { ok: waitedForArm && players[1].stunned > 0 && !players[0].trap, stun: players[1].stunned };
-
         prepare('trap', 'guard');
         useSkill(players[0]);
         useSkill(players[1]);
@@ -3619,7 +3618,6 @@
         updatePlayer(players[0], players[0].trap.arm + .01, { x: 0, y: 0 });
         updateTraps();
         results.trapShield = { ok: players[1].stunned === 0 && players[1].shieldHit && !players[0].trap, stun: players[1].stunned };
-
         prepare('vampire', 'dash');
         players[0].x = 400;
         players[0].y = 300;
@@ -3628,7 +3626,6 @@
         game.seats = [{ x: 420, y: 300, capture: [0, 1], scale: 1 }];
         useSkill(players[0]);
         results.vampire = { ok: players[1].stunned > 0 && players[0].vampireLeft > 0 && players[0].shieldLeft > 0 && game.seats[0].capture[1] < 1, stun: players[1].stunned, drained: game.seats[0].capture[1] };
-
         prepare('vampire', 'dash');
         players[0].x = 300;
         players[0].y = 300;
@@ -3636,7 +3633,6 @@
         players[1].y = 300;
         useSkill(players[0]);
         results.vampireRange = { ok: players[1].stunned === 0 && players[0].vampireLeft > 0 };
-
         prepare('dash', 'guard');
         game.time = 4;
         const newTitles = Object.fromEntries(['vampire', 'knight', 'ninja', 'mage'].map(kind => {
@@ -3647,7 +3643,6 @@
           ok: Object.values(newTitles).every(title => !title.includes('抢到了关键位置')),
           ...newTitles
         };
-
         prepare('knight', 'dash');
         players[0].x = 400;
         players[0].y = 300;
@@ -3656,7 +3651,6 @@
         useSkill(players[0]);
         updatePlayer(players[0], .05, { x: 0, y: 0 });
         results.knight = { ok: players[1].stunned > 0 && players[1].vx !== 0, stun: players[1].stunned };
-
         prepare('ninja', 'dash');
         players[0].x = 400;
         players[0].y = 300;
@@ -3664,7 +3658,6 @@
         results.ninja = { ok: players[0].ninjaLeft > 0 && Boolean(players[0].ninjaClone) && players[0].speedBoost > 1, boost: players[0].speedBoost };
         updatePlayer(players[0], .05, { x: 0, y: 0 });
         results.ninjaTick = { ok: players[0].ninjaClone && players[0].ninjaClone.life < 2 && players[0].ninjaLeft < 2 };
-
         prepare('mage', 'dash');
         players[0].x = 300;
         players[0].y = 300;
@@ -3736,4 +3729,4 @@
   } else {
     requestAnimationFrame(frame);
   }
-})();
+})();

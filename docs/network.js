@@ -39,6 +39,8 @@
     constructor() {
       this.peer = null;
       this.conn = null;
+      this.conns = [];        // host side: { conn, playerNumber } for every joined guest
+      this.roomSize = 2;      // host side: total seats including the host
       this.roomId = null;      // full peer id of the room, e.g. sofa-ABC123
       this.roomCode = null;    // the 6 characters players share
       this.playerId = null;
@@ -102,8 +104,9 @@
       });
     }
 
-    async createRoom(preferredCode) {
+    async createRoom(preferredCode, size) {
       await this.loadPeerJS();
+      this.roomSize = Math.max(2, Math.min(4, Number(size) || 2));
       this.playerNumber = 0;
       let lastError = null;
       for (let attempt = 0; attempt < 3; attempt++) {
@@ -176,11 +179,46 @@
     }
 
     handleConnection(conn, onOpen, onError, onClose) {
-      // A room has exactly two seats. If a third device (or a stale reconnect)
-      // dials in while the live channel is still open, refuse it instead of
-      // silently replacing this.conn and breaking the ongoing match.
-      if (this.conn && this.conn !== conn && this.conn.open) {
-        try { conn.close(); } catch (_) {}
+      // Host side: every room has roomSize seats (host included). Each guest
+      // dial gets the lowest free playerNumber; a full room still accepts the
+      // socket just long enough to tell the caller it is full, then closes.
+      if (this.playerNumber === 0) {
+        if (this.conns.filter(entry => entry.playerNumber !== null).length >= this.roomSize - 1) {
+          const pending = { conn, playerNumber: null };
+          this.conns.push(pending);
+          conn.on('open', () => {
+            try { conn.send({ type: 'roomFull', timestamp: Date.now() }); } catch (_) {}
+            setTimeout(() => { try { conn.close(); } catch (_) {} this.conns = this.conns.filter(item => item !== pending); }, 300);
+          });
+          conn.on('close', () => { this.conns = this.conns.filter(item => item !== pending); });
+          return;
+        }
+        const used = new Set(this.conns.map(entry => entry.playerNumber));
+        let seat = 1;
+        while (used.has(seat) && seat < this.roomSize) seat++;
+        const entry = { conn, playerNumber: seat };
+        this.conns.push(entry);
+        let opened = false;
+        conn.on('open', () => {
+          opened = true;
+          if (onOpen) onOpen(seat);
+          if (this.onPlayerJoin) this.onPlayerJoin(seat);
+        });
+        conn.on('data', data => { if (this.onData) this.onData(data, seat); });
+        conn.on('close', () => {
+          const wasOpen = opened;
+          opened = false;
+          this.conns = this.conns.filter(item => item !== entry);
+          if (wasOpen && this.onPlayerLeave) this.onPlayerLeave(seat);
+        });
+        conn.on('error', err => {
+          console.error('Connection error:', err);
+          if (onError) {
+            const error = new Error('连接失败，可能是双方网络限制，请切换网络后重试');
+            error.type = 'connection-failed';
+            onError(error);
+          }
+        });
         return;
       }
       this.conn = conn;
@@ -191,7 +229,7 @@
         if (onOpen) onOpen();
         if (this.onPlayerJoin) this.onPlayerJoin(this.playerNumber === 0 ? 1 : 0);
       });
-      conn.on('data', data => { if (this.onData) this.onData(data); });
+      conn.on('data', data => { if (this.onData) this.onData(data, this.playerNumber); });
       conn.on('close', () => {
         const wasOpen = opened;
         opened = false;
@@ -210,12 +248,27 @@
     }
 
     send(type, payload = {}) {
+      if (this.playerNumber === 0) {
+        // Host broadcasts to every joined guest (the host never sends to itself).
+        for (const entry of this.conns) {
+          if (entry.playerNumber !== null && entry.conn.open) entry.conn.send({ type, ...payload, timestamp: Date.now() });
+        }
+        return;
+      }
       if (!this.isConnected()) return;
       this.conn.send({ type, ...payload, timestamp: Date.now() });
     }
 
+    sendTo(playerNumber, type, payload = {}) {
+      if (this.playerNumber !== 0) return;
+      const entry = this.conns.find(item => item.playerNumber === playerNumber);
+      if (entry && entry.conn.open) entry.conn.send({ type, ...payload, timestamp: Date.now() });
+    }
+
     async leaveRoom() {
       const conn = this.conn;
+      const guests = this.conns;
+      this.conns = [];
       const peer = this.peer;
       this.conn = null;
       this.peer = null;
@@ -225,10 +278,12 @@
       this.playerId = null;
       this.playerNumber = null;
       try { if (conn) conn.close(); } catch (_) {}
+      for (const entry of guests) { try { entry.conn.close(); } catch (_) {} }
       try { if (peer) peer.destroy(); } catch (_) {}
     }
 
     isConnected() {
+      if (this.playerNumber === 0) return this.conns.some(entry => entry.playerNumber !== null && entry.conn.open);
       return Boolean(this.connected && this.conn && this.conn.open);
     }
   }
