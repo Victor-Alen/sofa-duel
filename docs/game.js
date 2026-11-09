@@ -451,7 +451,7 @@
       chaos: '混沌模式：所有机制随机砸下来！'
     }[ruleId] || '';
     resetPlayers();
-    const suddenDeath = game.scores[0] === WIN_SCORE - 1 && game.scores[1] === WIN_SCORE - 1;
+    const suddenDeath = game.scores.filter(s => s === WIN_SCORE - 1).length >= 2;
     showBanner(`第 ${game.round} 回合 · ${game.rule.name}${suddenDeath ? ' · 决胜分！' : ''}`, suddenDeath ? 1.6 : 1.1);
     if (suddenDeath) tone(520, .2, 'triangle', .06, 1.35);
     updateRuleHud();
@@ -748,7 +748,7 @@
     const poster = document.createElement('canvas');
     poster.width = 1080; poster.height = 1440;
     const g = poster.getContext('2d');
-    const winner = game.scores[0] > game.scores[1] ? 0 : 1;
+    const winner = game.scores.indexOf(Math.max(...game.scores));
     const winningName = CHARACTERS[game.picks[winner]].name;
     const title = winner === 0 ? '今晚沙发归我！' : `${winningName}抢到了沙发！`;
     const fillRound = (x, y, w, h, r, color) => { g.fillStyle = color; g.beginPath(); roundedPath(g, x, y, w, h, r); g.fill(); };
@@ -1426,7 +1426,7 @@ if (game.mode === 'online' && onlinePlayerNumber !== 0 && onlinePlayerNumber !==
       if (p.speedBoost > 0) speed *= (p.boostFactor || 1.5);
       // Rubber band: the trailing player gets a gentle boost so matches stay
       // tense until the last point (applies identically on host and guest).
-      if (game.phase === 'playing' && game.scores[1 - p.i] > game.scores[p.i]) speed *= 1.08;
+      if (game.phase === 'playing' && players.some(q => q !== p && game.scores[q.i] > game.scores[p.i])) speed *= 1.08;
       p.vx = move.x * speed;
       p.vy = move.y * speed;
       if (Math.hypot(move.x, move.y) > .15) {
@@ -1864,9 +1864,9 @@ if (game.mode === 'online' && onlinePlayerNumber !== 0 && onlinePlayerNumber !==
     if (p.emotionLeft > 0) return p.emotion;
     if (game.phase === 'playing') {
       const onSeat = game.seats.some(seat => dist(p, seat) < CAPTURE_RADIUS);
-      if (game.capture[1 - p.i] > .55 && !onSeat) return 'worried';
+      if (players.some(q => q !== p && game.capture[q.i] > .55) && !onSeat) return 'worried';
       if (game.capture[p.i] > .55) return 'happy';
-      if (game.time < 5 && game.scores[p.i] < game.scores[1 - p.i]) return 'worried';
+      if (game.time < 5 && players.some(q => q !== p && game.scores[q.i] > game.scores[p.i])) return 'worried';
     }
     return 'neutral';
   }
