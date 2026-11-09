@@ -496,7 +496,7 @@
     const matchPlayers = game.mode === 'cpu' || game.mode === 'chaos' ? Math.max(2, Math.min(4, game.localPlayerCount || 2)) : game.mode === 'online' ? Math.max(2, Math.min(4, onlineRoomSize || 2)) : 2;
     // Demo matches rotate the sofa count so the showcase shows off every layout.
     // Chaos mode always uses a single sofa, only the sofa state changes.
-    game.matchSofas = game.mode === 'demo' ? 1 + Math.floor(Math.random() * 3) : (game.mode === 'cpu' || game.mode === 'chaos') && matchPlayers >= 4 ? 3 : (game.mode === 'cpu' || game.mode === 'chaos') && matchPlayers === 3 ? 2 : game.mode === 'chaos' ? 1 : game.sofaCount;
+    game.matchSofas = game.mode === 'demo' ? 1 + Math.floor(Math.random() * 3) : game.mode === 'chaos' && (game.playerCount || 2) <= 2 ? 1 : game.sofaCount;
     document.body.classList.toggle('multi-sofa', game.matchSofas > 1);
     players = Array.from({ length: matchPlayers }, (_, i) => players[i] || makePlayer(i));
     game.playerCount = matchPlayers;
@@ -587,7 +587,7 @@
   function syncMode() {
     document.querySelectorAll('.mode').forEach(btn => btn.classList.toggle('active', btn.dataset.mode === game.mode));
     const waitingForOpponent = (game.mode === 'cpu' || game.mode === 'chaos') && !document.body.classList.contains('in-match');
-    $('start-btn').firstChild.textContent = game.mode === 'demo' ? '开始观看演示 ' : game.mode === 'online' ? '进入联网模式 ' : game.mode === 'chaos' ? '开始混沌抢沙发 ' : '开始抢沙发 ';
+    $('start-btn').firstChild.textContent = game.mode === 'demo' ? '开始观看演示 ' : game.mode === 'online' ? '进入联网模式 ' : game.mode === 'chaos' ? '开始混沌抢沙发 ' : '开始人机抢沙发 ';
     $('count-selector').hidden = !(game.mode === 'cpu' || game.mode === 'chaos');
     const local = localPlayerIndex();
     // Never dereference a partial network pick array while a lobby/match transition is rendering.
