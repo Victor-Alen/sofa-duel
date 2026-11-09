@@ -2493,12 +2493,13 @@ if (game.mode === 'online' && onlinePlayerNumber !== 0 && onlinePlayerNumber !==
   let onlineState = 'menu'; // menu | waiting | select | playing
   let onlineRoomCode = null;
   let onlinePlayerNumber = null; // 0 = host, 1 = guest
-let GAME_VERSION = '15.8.5';      // handshake: mismatched versions between devices break the protocol
+let GAME_VERSION = '15.8.6';      // handshake: mismatched versions between devices break the protocol
 let onlineRoomSize = 2;         // total seats including the host (2-4)
 let onlineCharacters = [];      // indexed by playerNumber: null | characterId
 let onlineReady = [];           // indexed by playerNumber
 let onlineGuestInputs = [];     // host side: per-guest input, indexed by playerNumber - 1
 let onlineRematchVotes = new Set();
+let onlineRematchForceTimer = null; // host: start anyway if a player stalls on the result screen
 let onlineSeatConfirmed = false; // guest: welcome (seat assignment) received
   let onlineLobbyEpoch = 0;
   let onlineMatchId = 0;
@@ -2875,6 +2876,8 @@ let remoteInterpolations = []; // guest side: one interpolation state per remote
     stopOnlineLoop();
     onlineMatchId++;
     onlineState = 'playing';
+    onlineRematchVotes = new Set();
+    if (onlineRematchForceTimer) { clearTimeout(onlineRematchForceTimer); onlineRematchForceTimer = null; }
     game.mode = 'online';
     game.manualPicks = [...onlineCharacters];
     game.picks = [...game.manualPicks];
