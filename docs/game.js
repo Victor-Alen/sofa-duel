@@ -2453,6 +2453,7 @@ if (game.mode === 'online' && onlinePlayerNumber !== 0 && onlinePlayerNumber !==
   let onlineState = 'menu'; // menu | waiting | select | playing
   let onlineRoomCode = null;
   let onlinePlayerNumber = null; // 0 = host, 1 = guest
+let GAME_VERSION = '15.8.3';      // handshake: mismatched versions between devices break the protocol
 let onlineRoomSize = 2;         // total seats including the host (2-4)
 let onlineCharacters = [];      // indexed by playerNumber: null | characterId
 let onlineReady = [];           // indexed by playerNumber
@@ -2639,7 +2640,7 @@ let remoteInterpolations = []; // guest side: one interpolation state per remote
         if (onlineReconnectTimer) { clearTimeout(onlineReconnectTimer); onlineReconnectTimer = null; }
         enterOnlineSelect();
         // Assign the seat, then publish the authoritative lobby to everyone.
-        network.sendTo(seat, 'welcome', { playerNumber: seat, size: onlineRoomSize, epoch: onlineLobbyEpoch });
+        network.sendTo(seat, 'welcome', { playerNumber: seat, size: onlineRoomSize, epoch: onlineLobbyEpoch, v: GAME_VERSION });
         broadcastOnlineLobby();
       };
     } catch (error) {
@@ -2758,7 +2759,8 @@ let remoteInterpolations = []; // guest side: one interpolation state per remote
       size: onlineRoomSize,
       characters: [...onlineCharacters],
       ready: [...onlineReady],
-      connected: onlineConnectedSeats()
+      connected: onlineConnectedSeats(),
+      v: GAME_VERSION
     });
   }
   function updateOnlineLobby() {
@@ -3204,6 +3206,7 @@ let remoteInterpolations = []; // guest side: one interpolation state per remote
           onlineReady = data.ready.slice(0, onlineRoomSize).map(Boolean);
           onlineSeatConfirmed = true;
           while (onlineReady.length < onlineRoomSize) onlineReady.push(false);
+          if (data.v && data.v !== GAME_VERSION) $('online-error').textContent = '双方游戏版本不一致，请双方都刷新页面后再联机';
           updateOnlineLobby();
         }
         break;
@@ -3213,6 +3216,7 @@ let remoteInterpolations = []; // guest side: one interpolation state per remote
           onlineRoomSize = Math.max(2, Math.min(4, Number(data.size) || 2));
           onlineSeatConfirmed = true;
           if (Number.isInteger(data.epoch)) onlineLobbyEpoch = Math.max(onlineLobbyEpoch, data.epoch);
+          if (data.v && data.v !== GAME_VERSION) $('online-error').textContent = '双方游戏版本不一致，请双方都刷新页面（下拉刷新或强刷）后再联机';
           updateOnlineLobby();
         }
         break;
