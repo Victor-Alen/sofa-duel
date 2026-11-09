@@ -762,9 +762,25 @@
     g.fillStyle = '#2b3140'; g.font = '900 74px sans-serif'; g.fillText(title, 76, 319);
     g.fillStyle = '#807f87'; g.font = '600 29px sans-serif'; g.fillText(`最近规则：${game.ruleHistory.slice(-3).map(id => RULES[id].name).join(' → ')}`, 80, 378);
     fillRound(76, 430, 928, 128, 28, '#fff');
-    g.fillStyle = CHARACTERS[game.picks[0]].color; g.font = '900 66px sans-serif'; g.fillText(`${CHARACTERS[game.picks[0]].name}  ${game.scores[0]}`, 115, 513);
-    g.fillStyle = '#cbbfba'; g.font = '900 42px sans-serif'; g.fillText('VS', 510, 510);
-    g.fillStyle = CHARACTERS[game.picks[1]].color; g.font = '900 66px sans-serif'; g.textAlign = 'right'; g.fillText(`${game.scores[1]}  ${CHARACTERS[game.picks[1]].name}`, 965, 513); g.textAlign = 'left';
+    const panelCount = players.length;
+    if (panelCount <= 2) {
+      g.fillStyle = CHARACTERS[game.picks[0]].color; g.font = '900 66px sans-serif'; g.fillText(`${CHARACTERS[game.picks[0]].name}  ${game.scores[0]}`, 96, 510);
+      g.fillStyle = '#cbbfba'; g.font = '900 42px sans-serif'; g.fillText('VS', 510, 510);
+      g.fillStyle = CHARACTERS[game.picks[1]].color; g.font = '900 66px sans-serif'; g.textAlign = 'right'; g.fillText(`${game.scores[1]}  ${CHARACTERS[game.picks[1]].name}`, 984, 510); g.textAlign = 'left';
+    } else {
+      // Party match: one column per player, the current leader gets the crown.
+      const bestScore = Math.max(...game.scores);
+      game.picks.forEach((id, idx) => {
+        const character = CHARACTERS[id];
+        const cx = 76 + 928 * (idx + .5) / panelCount;
+        g.textAlign = 'center';
+        g.fillStyle = character.color; g.font = '900 54px sans-serif';
+        g.fillText(`${game.scores[idx]}  ${character.name}${game.scores[idx] === bestScore ? ' 👑' : ''}`, cx, 495);
+        g.fillStyle = '#9e8d83'; g.font = '600 24px sans-serif';
+        g.fillText(idx === 0 ? '你' : '电脑', cx, 533);
+      });
+      g.textAlign = 'left';
+    }
     g.save(); g.beginPath(); roundedPath(g, 76, 607, 928, 522, 30); g.clip(); g.drawImage(canvas, 0, 0, W, H, 76, 607, 928, 522); g.restore();
     fillRound(76, 1185, 928, 135, 28, '#ff6d53');
     g.fillStyle = '#fff'; g.font = '900 50px sans-serif'; g.fillText('你敢来抢吗？', 115, 1267);
@@ -2477,7 +2493,7 @@ if (game.mode === 'online' && onlinePlayerNumber !== 0 && onlinePlayerNumber !==
   let onlineState = 'menu'; // menu | waiting | select | playing
   let onlineRoomCode = null;
   let onlinePlayerNumber = null; // 0 = host, 1 = guest
-let GAME_VERSION = '15.8.4';      // handshake: mismatched versions between devices break the protocol
+let GAME_VERSION = '15.8.5';      // handshake: mismatched versions between devices break the protocol
 let onlineRoomSize = 2;         // total seats including the host (2-4)
 let onlineCharacters = [];      // indexed by playerNumber: null | characterId
 let onlineReady = [];           // indexed by playerNumber
