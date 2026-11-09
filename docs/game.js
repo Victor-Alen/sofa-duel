@@ -512,7 +512,8 @@
     }
     syncMode();
     // Demo matches rotate the sofa count so the showcase shows off every layout.
-    game.matchSofas = game.mode === 'demo' || game.mode === 'chaos' ? 1 + Math.floor(Math.random() * 3) : game.sofaCount;
+    // Chaos mode always uses a single sofa, only the sofa state changes.
+    game.matchSofas = game.mode === 'demo' ? 1 + Math.floor(Math.random() * 3) : game.mode === 'chaos' ? 1 : game.sofaCount;
     document.body.classList.toggle('multi-sofa', game.matchSofas > 1);
     game.scores = [0, 0];
     game.combo = [0, 0];
@@ -628,6 +629,8 @@
     $('dash-touch').firstChild.textContent = touchCharacter.skill.name;
     $('dash-touch').style.background = touchCharacter.color;
     $('dash-touch').style.borderBottomColor = touchCharacter.dark;
+    // 更新闪闪技能切换按钮
+    if (typeof updateSkillToggleUI === 'function') updateSkillToggleUI();
     $('picker-b-row').hidden = game.mode !== 'duo';
     document.querySelector('.pickers').hidden = game.mode === 'demo' || game.mode === 'online';
     const diffSelector = $('difficulty-selector');
@@ -669,7 +672,13 @@
     }
     const first = CHARACTERS[game.manualPicks[0]];
     const second = CHARACTERS[game.manualPicks[1]];
-    const describe = character => `${character.name} · ${character.personality}；${character.skill.name}：${character.skill.description}（移动 ${character.speed} · 冷却 ${character.skill.cooldown} 秒）`;
+    const describe = character => {
+      let text = `${character.name} · ${character.personality}；${character.skill.name}：${character.skill.description}（移动 ${character.speed} · 冷却 ${character.skill.cooldown} 秒）`;
+      if (character.skillAlt) {
+        text += `\n${character.skillAlt.name}：${character.skillAlt.description}（冷却 ${character.skillAlt.cooldown} 秒）· Q键切换`;
+      }
+      return text;
+    };
     $('skill-note').textContent = describe(first);
     $('skill-note-b').textContent = describe(second);
     $('skill-note-b').hidden = game.mode !== 'duo';
@@ -928,6 +937,15 @@
       burst(p.x, p.y, p.i, 14);
       tone(760, .12, 'sine', .05);
     },
+    blinkSpeed(p, skill) {
+      // 闪闪加速模式：大幅提升移动速度
+      p.speedBoost = skill.duration;
+      p.boostFactor = skill.boost;
+      burst(p.x, p.y - 10, p.i, 12);
+      burst(p.x, p.y + 10, p.i, 12);
+      tone(820, .1, 'sine', .06, 1.2);
+      tone(920, .08, 'sine', .05, 1.4);
+    },
     pull(p, skill) {
       p.pullLeft = .34;
       const other = players[1 - p.i];
@@ -952,14 +970,13 @@
       p.shieldLeft = Math.max(p.shieldLeft, skill.duration * 0.6); // Partial invulnerability
       const other = players[1 - p.i];
       if (dist(p, other) <= 80) {
-        // Lifesteal: heal self and stun opponent
+        // Lifesteal: stun opponent and knock them back slightly
         other.stunned = Math.max(other.stunned, skill.stun);
         other.impactLeft = .3;
         react(other, 'dizzy', skill.stun);
         react(p, 'smug', .5);
         burst(other.x, other.y - 10, p.i, 16);
         tone(280, .18, 'sawtooth', .06, .7);
-        game.lastImpact = { side: p.i, kind: 'vampire', time: game.time };
       }
       burst(p.x, p.y - 15, p.i, 12);
       tone(220, .22, 'sine', .05, .6);
@@ -1015,7 +1032,12 @@
 
   function useSkill(p, simultaneous = false) {
     if (game.phase !== 'playing' || game.paused || p.skillCooldown > 0 || (!simultaneous && p.stunned > 0)) return;
-    const skill = CHARACTERS[p.characterId].skill;
+    const character = CHARACTERS[p.characterId];
+    // 闪闪双技能切换：根据当前模式选择技能
+    let skill = character.skill;
+    if (p.characterId === 'blink' && p.useAltSkill && character.skillAlt) {
+      skill = character.skillAlt;
+    }
     const handler = skillHandlers[skill.kind];
     if (!handler) return;
     p.skillCooldown = skill.cooldown * (game.rule && game.rule.id === 'frenzy' ? game.rule.cooldownFactor : 1) * aiCooldownFactor(p);
@@ -1314,24 +1336,32 @@
     if (p.vampireLeft > 0) p.vampireLeft = Math.max(0, p.vampireLeft - dt);
     if (p.knightLeft > 0) {
       p.knightLeft = Math.max(0, p.knightLeft - dt);
-      // Knight rotating sword: check collision with opponent
+      p.knightHitCooldown = Math.max(0, (p.knightHitCooldown || 0) - dt);
+      // Knight rotating sword: check collision with opponent (can hit multiple times)
       const other = players[1 - p.i];
-      if (dist(p, other) <= p.knightRadius && !p.knightHit) {
-        p.knightHit = true;
-        other.stunned = Math.max(other.stunned, p.knightStun);
-        other.impactLeft = .3;
+      const distance = dist(p, other);
+      if (distance <= p.knightRadius && p.knightHitCooldown <= 0) {
+        // Set cooldown to prevent continuous hitting every frame
+        p.knightHitCooldown = 0.3;
+        // Use pushAway to properly knock back the opponent
         const dx = other.x - p.x, dy = other.y - p.y;
-        const distance = Math.hypot(dx, dy) || 1;
-        other.vx = (dx / distance) * p.knightPower;
-        other.vy = (dy / distance) * p.knightPower;
-        react(other, 'dizzy', p.knightStun);
-        react(p, 'smug', .4);
+        const dist = Math.hypot(dx, dy) || 1;
+        const pushPower = p.knightPower || 380;
+        other.vx = (dx / dist) * pushPower;
+        other.vy = (dy / dist) * pushPower;
+        other.stunned = Math.max(other.stunned, p.knightStun || 0.6);
+        other.impactLeft = .3;
+        other.blink = .2;
+        react(other, 'dizzy', p.knightStun || 0.6);
+        react(p, 'smug', .3);
         burst(other.x, other.y - 10, p.i, 14);
-        game.lastImpact = { side: p.i, kind: 'knight', time: game.time };
         game.shake = Math.max(game.shake, .15);
         tone(200, .12, 'square', .06, .9);
       }
-      if (p.knightLeft <= 0) p.knightHit = false;
+      if (p.knightLeft <= 0) {
+        p.knightHit = false;
+        p.knightHitCooldown = 0;
+      }
     }
     if (p.ninjaLeft > 0) {
       p.ninjaLeft = Math.max(0, p.ninjaLeft - dt);
@@ -1385,8 +1415,8 @@
       p.vy *= Math.pow(.9, dt * 60);
     } else {
       let speed = CHARACTERS[p.characterId].speed;
-      // Ninja speed boost
-      if (p.speedBoost > 0) speed *= 1.5;
+      // 忍者加速效果
+      if (p.speedBoost > 0) speed *= (p.boostFactor || 1.5);
       // Rubber band: the trailing player gets a gentle boost so matches stay
       // tense until the last point (applies identically on host and guest).
       if (game.phase === 'playing' && game.scores[1 - p.i] > game.scores[p.i]) speed *= 1.08;
@@ -2040,6 +2070,22 @@
       ctx.fillStyle = '#fff';
       ctx.beginPath(); ctx.arc(proj.x, proj.y, 4, 0, 7); ctx.fill();
     }
+    // 闪闪加速模式效果：速度线
+    if (p.speedBoost > 0 && p.characterId === 'blink') {
+      ctx.strokeStyle = '#ffe2a0'; ctx.lineWidth = 3; ctx.globalAlpha = 0.7;
+      const speed = Math.hypot(p.vx, p.vy);
+      if (speed > 50) {
+        const angle = Math.atan2(p.vy, p.vx);
+        for (let i = 1; i <= 3; i++) {
+          const offset = i * 15;
+          ctx.beginPath();
+          ctx.moveTo(x - Math.cos(angle) * offset, y - 7 - Math.sin(angle) * offset);
+          ctx.lineTo(x - Math.cos(angle) * (offset + 20), y - 7 - Math.sin(angle) * (offset + 20));
+          ctx.stroke();
+        }
+      }
+      ctx.globalAlpha = 1;
+    }
     roundRect(x - 27, y - 65, 54, 21, 9, '#fffaf0');
     ctx.fillStyle = dark; ctx.font = '800 12px Noto Sans SC, sans-serif'; ctx.textAlign = 'center'; ctx.fillText(character.name, x, y - 49);
     if (p.skillCooldown > 0) {
@@ -2321,6 +2367,17 @@
     if (event.code === 'KeyR' && game.phase !== 'menu' && game.mode !== 'online') startMatch();
     if (event.code === 'Space' && game.mode !== 'demo') useLocalSkill();
     if (event.code === 'Enter' && game.mode === 'duo') { registerMash(players[1]); useSkill(players[1]); }
+    // Q键切换闪闪技能模式
+    if (event.code === 'KeyQ' && game.mode !== 'demo') {
+      const localIdx = localPlayerIndex();
+      const player = players[localIdx];
+      if (player && player.characterId === 'blink') {
+        player.useAltSkill = !player.useAltSkill;
+        updateSkillToggleUI();
+        updateDashTouchUI();
+        tone(680, .08, 'sine', .04);
+      }
+    }
   });
   document.addEventListener('keyup', event => keys.delete(event.code));
   window.addEventListener('blur', () => { keys.clear(); stickEnd(); });
@@ -2343,6 +2400,48 @@
   stick.addEventListener('pointercancel', stickEnd);
   stick.addEventListener('lostpointercapture', stickEnd);
   $('dash-touch').addEventListener('pointerdown', e => { e.preventDefault(); useLocalSkill(); });
+  // 闪闪技能切换按钮
+  $('skill-toggle')?.addEventListener('pointerdown', e => {
+    e.preventDefault();
+    const localIdx = localPlayerIndex();
+    const player = players[localIdx];
+    if (player && player.characterId === 'blink') {
+      player.useAltSkill = !player.useAltSkill;
+      updateSkillToggleUI();
+      tone(680, .08, 'sine', .04);
+    }
+  });
+  // 更新技能切换按钮UI
+  function updateSkillToggleUI() {
+    const btn = $('skill-toggle');
+    if (!btn) return;
+    const localIdx = localPlayerIndex();
+    const player = players[localIdx];
+    const isBlink = player && player.characterId === 'blink';
+    btn.hidden = !isBlink || game.mode === 'demo';
+    if (isBlink) {
+      const skillName = player.useAltSkill ? '加速' : '闪现';
+      btn.firstChild.textContent = skillName;
+      btn.style.background = player.useAltSkill ? '#10b981' : '#4a5568';
+      btn.style.borderColor = player.useAltSkill ? '#059669' : '#2d3748';
+    }
+  }
+  // 更新技能按钮文本（移动端）
+  function updateDashTouchUI() {
+    const btn = $('dash-touch');
+    if (!btn) return;
+    const localIdx = localPlayerIndex();
+    const player = players[localIdx];
+    if (!player) return;
+    const character = CHARACTERS[player.characterId];
+    let skillName = character.skill.name;
+    if (player.characterId === 'blink' && player.useAltSkill && character.skillAlt) {
+      skillName = character.skillAlt.name;
+    }
+    btn.firstChild.textContent = skillName;
+    btn.style.background = character.color;
+    btn.style.borderBottomColor = character.dark;
+  }
 
   // Online Multiplayer (PeerJS WebRTC)
   // The host runs the real match; the guest sends its input and renders host snapshots.
