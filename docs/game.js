@@ -377,7 +377,9 @@
     if (impact && impact.side === winner && impact.time - game.time < 2.4) {
       return {
         dash: '这一撞值回票价！', shield: '这一挡，反击漂亮！', pulse: '一下震开，机会来了！',
-        blink: '这一闪，刚刚好！', pull: '拉回来，再弹走！', trap: '抱枕立大功！'
+        blink: '这一闪，刚刚好！', pull: '拉回来，再弹走！', trap: '抱枕立大功！',
+        vampire: '这一口，吸得刚刚好！', knight: '剑刃一转，胜局已定！',
+        ninja: '真身抢座，分身有功！', mage: '隔空一弹，正中要害！'
       }[impact.kind] || `${name}抢到了关键位置！`;
     }
     return `${name}抢到了关键位置！`;
@@ -3559,6 +3561,17 @@
         players[1].y = 300;
         useSkill(players[0]);
         results.vampireRange = { ok: players[1].stunned === 0 && players[0].vampireLeft > 0 };
+
+        prepare('dash', 'guard');
+        game.time = 4;
+        const newTitles = Object.fromEntries(['vampire', 'knight', 'ninja', 'mage'].map(kind => {
+          game.lastImpact = { side: 0, kind, time: 5 };
+          return [kind, highlightTitle(0, 'capture')];
+        }));
+        results.newHighlightTitles = {
+          ok: Object.values(newTitles).every(title => !title.includes('抢到了关键位置')),
+          ...newTitles
+        };
 
         prepare('knight', 'dash');
         players[0].x = 400;
