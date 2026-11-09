@@ -496,7 +496,7 @@
     const matchPlayers = game.mode === 'cpu' || game.mode === 'chaos' ? Math.max(2, Math.min(4, game.localPlayerCount || 2)) : game.mode === 'online' ? Math.max(2, Math.min(4, onlineRoomSize || 2)) : 2;
     // Demo matches rotate the sofa count so the showcase shows off every layout.
     // Chaos mode always uses a single sofa, only the sofa state changes.
-    game.matchSofas = game.mode === 'demo' ? 1 + Math.floor(Math.random() * 3) : game.mode === 'chaos' && (game.playerCount || 2) <= 2 ? 1 : game.sofaCount;
+    game.matchSofas = game.mode === 'demo' ? 1 + Math.floor(Math.random() * 3) : game.mode === 'chaos' ? 1 : game.sofaCount;
     document.body.classList.toggle('multi-sofa', game.matchSofas > 1);
     players = Array.from({ length: matchPlayers }, (_, i) => players[i] || makePlayer(i));
     game.playerCount = matchPlayers;
@@ -1285,6 +1285,13 @@ if (game.mode === 'online' && onlinePlayerNumber !== 0 && onlinePlayerNumber !==
       }
       const target = nearSeat && (nearOther || contested) ? chaseTarget : (targetSeat || other);
       let dx = target.x - p.x, dy = target.y - p.y;
+      // 多人模式下添加随机偏移，避免AI聚集在一起
+      if (players.length > 2 && Math.random() < 0.15) {
+        const angle = Math.random() * Math.PI * 2;
+        const offset = 60;
+        dx += Math.cos(angle) * offset;
+        dy += Math.sin(angle) * offset;
+      }
       const length = Math.hypot(dx, dy);
       if (nearSeat && !nearOther && !contested) return { x: 0, y: 0 };
       if (length > 1) { dx /= length; dy /= length; }
@@ -1489,7 +1496,14 @@ if (game.mode === 'online' && onlinePlayerNumber !== 0 && onlinePlayerNumber !==
       for (let pj = pi + 1; pj < players.length; pj++) {
         const a = players[pi], b = players[pj];
         const d = dist(a, b);
-        if (d >= 50) return;
+        // AI之间的排斥力，防止聚集
+        if (d < 80 && isAiPlayer(a) && isAiPlayer(b) && players.length > 2) {
+          const nx = (b.x - a.x) / (d || 1), ny = (b.y - a.y) / (d || 1);
+          const repulsion = (80 - d) * 2;
+          a.vx -= nx * repulsion; a.vy -= ny * repulsion;
+          b.vx += nx * repulsion; b.vy += ny * repulsion;
+        }
+        if (d >= 50) continue;
         const nx = (b.x - a.x) / (d || 1), ny = (b.y - a.y) / (d || 1);
         const overlap = (50 - d) / 2;
         a.x -= nx * overlap; a.y -= ny * overlap;
@@ -1587,7 +1601,7 @@ if (game.mode === 'online' && onlinePlayerNumber !== 0 && onlinePlayerNumber !==
     // 混沌模式: every 3-5 seconds the room rule mutates into a different one,
     // so all sofa mechanics show up randomly within a single match.
     // This runs early to ensure mutations happen even during hitStop.
-    if (game.mode === 'chaos' && game.phase === 'playing') {
+    if (game.mode === 'chaos' && (game.phase === 'playing' || game.phase === 'countdown' || game.phase === 'roundEnd')) {
       game.chaosTimer = (game.chaosTimer || 0) + dt;
       if (!game.chaosNext) game.chaosNext = 3 + Math.random() * 2;
       if (game.chaosTimer >= game.chaosNext) {

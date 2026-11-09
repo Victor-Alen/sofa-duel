@@ -1,6 +1,5 @@
 (() => {
   'use strict';
-
   const canvas = document.getElementById('game');
   // alpha:false: the game fills the full frame every tick, so the compositor
   // gets an opaque fast path (measurable on phones).
@@ -48,12 +47,10 @@
     // the outer seats stay visible, and players stay inside that band.
     return document.body.classList.contains('multi-sofa') ? [150, W - 150] : [300, 660];
   };
-
   // Apply desktop fullscreen mode automatically
   if (isDesktop()) {
     document.body.classList.add('desktop-mode');
   }
-
   // Listen for resize to toggle desktop mode
   window.addEventListener('resize', () => {
     if (isDesktop()) {
@@ -62,8 +59,7 @@
       document.body.classList.remove('desktop-mode');
     }
   });
-
-  const players = [makePlayer(0), makePlayer(1)];
+  let players = [makePlayer(0), makePlayer(1)];
   const highlightPool = Array.from({ length: HIGHLIGHT_FRAME_COUNT }, () => {
     const frame = document.createElement('canvas');
     frame.width = 480; frame.height = 270;
@@ -81,11 +77,18 @@
   let last = performance.now();
   let lastBumpAt = 0;  // throttle the body-squeeze thud
   let lastCaptureTickAt = 0;  // throttle the capture heartbeat
-
   function makePlayer(i) {
     return { i, characterId: i ? 'guard' : 'dash', x: i ? 740 : 220, y: 360, vx: 0, vy: 0, facingX: i ? -1 : 1, facingY: 0, dashLeft: 0, dashHit: false, shieldLeft: 0, shieldHit: false, pulseLeft: 0, pullLeft: 0, warpLeft: 0, reboundLeft: 0, reboundX: 0, reboundY: 0, reboundPower: 0, trap: null, skillCooldown: 0, stunned: 0, blink: 0, walk: 0, aiDecision: 0, wantsSkill: false, anim: i * 1.7, emotion: 'neutral', emotionLeft: 0, castLeft: 0, castTotal: .4, impactLeft: 0, celebrateLeft: 0, vampireLeft: 0, knightLeft: 0, knightHit: false, knightRadius: 0, knightStun: 0, knightPower: 0, ninjaLeft: 0, ninjaClone: null, speedBoost: 0, mageProjectile: null };
   }
-
+  function nearestOpponent(p) {
+    let best = null, bestDistance = Infinity;
+    for (const q of players) {
+      if (q === p) continue;
+      const distance = dist(p, q);
+      if (distance < bestDistance) { bestDistance = distance; best = q; }
+    }
+    return best;
+  }
   function tone(frequency = 440, duration = .09, type = 'sine', volume = .055, slide = 1) {
     if (!sfxOn) return;
     if (!game.audio) return;
@@ -103,7 +106,6 @@
       osc.start(); osc.stop(ac.currentTime + duration);
     } catch (_) { /* Audio is optional. */ }
   }
-
   function characterSound(p, event) {
     const character = CHARACTERS[p.characterId];
     const settings = {
@@ -117,18 +119,15 @@
     tone(character.pitch * pitch, duration, character.wave, volume, slide);
     if (event === 'win') setTimeout(() => tone(character.pitch * 1.8, .16, 'triangle', .04, 1.12), 85);
   }
-
   function loadStats() {
     try {
       const saved = localStorage.getItem('sofa-duel-stats');
       return saved ? JSON.parse(saved) : { matches: 0, wins: 0, totalScore: 0, maxCombo: 0, achievements: [], fastestWin: Infinity };
     } catch (_) { return { matches: 0, wins: 0, totalScore: 0, maxCombo: 0, achievements: [], fastestWin: Infinity }; }
   }
-
   function saveStats() {
     try { localStorage.setItem('sofa-duel-stats', JSON.stringify(game.stats)); } catch (_) {}
   }
-
   function updateStats(winner, localIndex = 0) {
     const iWon = winner === localIndex;
     game.stats.matches++;
@@ -140,7 +139,6 @@
     checkAchievements();
     saveStats();
   }
-
   function checkAchievements() {
     const newAchievements = [];
     if (game.stats.matches >= 1 && !game.stats.achievements.includes('first-match')) newAchievements.push({ id: 'first-match', title: '初出茅庐', desc: '完成第一场比赛' });
@@ -155,7 +153,6 @@
     }
     if (!game.currentAchievement && game.achievementQueue.length > 0) showNextAchievement();
   }
-
   function showNextAchievement() {
     if (game.achievementQueue.length === 0) { game.currentAchievement = null; return; }
     const ach = game.achievementQueue.shift();
@@ -169,7 +166,6 @@
       setTimeout(() => showNextAchievement(), 400);
     }, 2800);
   }
-
   function startBackgroundMusic() {
     if (!game.audio || !musicOn || game.music) return;
     try {
@@ -188,7 +184,6 @@
       gain.gain.linearRampToValueAtTime(.28, ac.currentTime + 1.2);
       gain.connect(ac.destination);
       game.musicGain = gain;
-
       // Music styles: cheerful (轻快), energetic (激情), relaxed (舒缓)
       const styles = {
         cheerful: {
@@ -219,12 +214,10 @@
           bassWave: 'sine'
         }
       };
-
       const style = styles[musicStyle] || styles.cheerful;
       const beatDuration = 60 / style.tempo;
       let beatIndex = 0;
       let chordIndex = 0;
-
       const playNote = (freq, startTime, duration, type = 'sine', volume = .3) => {
         const osc = ac.createOscillator();
         const oscGain = ac.createGain();
@@ -237,29 +230,24 @@
         osc.start(startTime);
         osc.stop(startTime + duration);
       };
-
       const loopMusic = () => {
         if (!game.music) return;
         const now = ac.currentTime;
         const chord = style.chordProg[chordIndex % style.chordProg.length];
-
         // Play 8 beats per loop
         for (let i = 0; i < 8; i++) {
           const beatTime = now + i * beatDuration;
-
           // Bass line
           if (style.bassPattern[i]) {
             const bassFreq = style.scale[chord[0]] / 2;
             playNote(bassFreq, beatTime, beatDuration * .8, style.bassWave, .35);
           }
-
           // Chord pads
           if (i === 0) {
             for (const noteIdx of chord) {
               playNote(style.scale[noteIdx], beatTime, beatDuration * 7.5, style.wave, .15);
             }
           }
-
           // Melody
           if (style.melodyPattern[i]) {
             const melodyIdx = (chord[i % chord.length] + i) % style.scale.length;
@@ -267,24 +255,19 @@
             playNote(melodyFreq, beatTime, beatDuration * .6, style.wave, .22);
           }
         }
-
         chordIndex++;
         beatIndex += 8;
-
         // Dynamic tempo based on game state
         const heat = Math.max(game.combo[0], game.combo[1]);
-        const suddenDeath = game.scores[0] === WIN_SCORE - 1 && game.scores[1] === WIN_SCORE - 1;
+    const suddenDeath = game.scores.filter(s => s === WIN_SCORE - 1).length >= 2;
         const tempoMult = suddenDeath ? .75 : heat >= 3 ? .8 : heat >= 2 ? .9 : 1;
         const loopDuration = beatDuration * 8 * 1000 * tempoMult;
-
         game.music = setTimeout(loopMusic, loopDuration);
       };
-
       game.music = 'playing';
       loopMusic();
     } catch (_) { game.music = null; }
   }
-
   function stopBackgroundMusic() {
     if (game.music) { clearTimeout(game.music); game.music = null; }
     if (game.musicGain) {
@@ -295,13 +278,11 @@
       } catch (_) { game.musicGain = null; }
     }
   }
-
   function react(p, emotion, seconds = .65, celebrate = false) {
     p.emotion = emotion;
     p.emotionLeft = seconds;
     if (celebrate) p.celebrateLeft = seconds;
   }
-
   function showBanner(text, seconds = 1) {
     game.bannerText = text;
     game.bannerTime = seconds;
@@ -310,17 +291,20 @@
     el.textContent = text;
     el.classList.add('show');
   }
-
   function resetPlayers() {
     const multi = game.seats.length > 1;
-    const spawn = multi ? [150, 810] : game.mode === 'online' || !narrowScreen() ? [230, 730] : [340, 620];
+    const count = players.length;
+    const spawn = multi
+      ? Array.from({ length: count }, (_, i) => 150 + i * (660 / Math.max(1, count - 1)))
+      : game.mode === 'online' || !narrowScreen()
+        ? Array.from({ length: count }, (_, i) => 230 + i * (500 / Math.max(1, count - 1)))
+        : Array.from({ length: count }, (_, i) => 340 + i * (280 / Math.max(1, count - 1)));
     const spawnY = multi ? 470 : 355;
-    for (let i = 0; i < 2; i++) {
+    for (let i = 0; i < count; i++) {
       const p = players[i];
-      Object.assign(p, { characterId: game.picks[i], x: spawn[i], y: spawnY, vx: 0, vy: 0, facingX: i ? -1 : 1, facingY: 0, dashLeft: 0, dashHit: false, shieldLeft: 0, shieldHit: false, pulseLeft: 0, pullLeft: 0, warpLeft: 0, reboundLeft: 0, reboundX: 0, reboundY: 0, reboundPower: 0, trap: null, skillCooldown: 0, stunned: 0, blink: 0, walk: 0, aiDecision: i ? .5 + Math.random() * .6 : 0, wantsSkill: false, anim: i * 1.7, emotion: 'neutral', emotionLeft: 0, castLeft: 0, castTotal: .4, impactLeft: 0, celebrateLeft: 0 });
+      Object.assign(p, { characterId: game.picks[i], x: spawn[i], y: spawnY, vx: 0, vy: 0, facingX: i < count / 2 ? 1 : -1, facingY: 0, dashLeft: 0, dashHit: false, shieldLeft: 0, shieldHit: false, pulseLeft: 0, pullLeft: 0, warpLeft: 0, reboundLeft: 0, reboundX: 0, reboundY: 0, reboundPower: 0, trap: null, skillCooldown: 0, stunned: 0, blink: 0, walk: 0, aiDecision: i ? .5 + Math.random() * .6 : 0, wantsSkill: false, anim: i * 1.7, emotion: 'neutral', emotionLeft: 0, castLeft: 0, castTotal: .4, impactLeft: 0, celebrateLeft: 0 });
     }
   }
-
   function updateRuleHud() {
     const hud = $('rule-hud');
     const mashBar = $('mash-bar');
@@ -352,21 +336,18 @@
     hud.dataset.phase = game.rulePhase;
     hud.classList.toggle('warning', game.rulePhase === 'warning');
   }
-
   function clearHighlight() {
     game.replay = null;
     game.highlightFrames = [];
     game.highlightClock = 0;
     $('replay-ui').hidden = true;
   }
-
   function skipReplay() {
     if (!game.replay) return;
     game.replay = null;
     $('replay-ui').hidden = true;
     game.wait = Math.min(game.wait, .9);
   }
-
   function highlightTitle(winner, reason) {
     const name = CHARACTERS[game.picks[winner]].name;
     if (reason === 'mash') return `${name}手速碾压！`;
@@ -377,29 +358,27 @@
     if (impact && impact.side === winner && impact.time - game.time < 2.4) {
       return {
         dash: '这一撞值回票价！', shield: '这一挡，反击漂亮！', pulse: '一下震开，机会来了！',
-        blink: '这一闪，刚刚好！', pull: '拉回来，再弹走！', trap: '抱枕立大功！'
+        blink: '这一闪，刚刚好！', pull: '拉回来，再弹走！', trap: '抱枕立大功！',
+        vampire: '这一口，吸得刚刚好！', knight: '剑刃一转，胜局已定！',
+        ninja: '真身抢座，分身有功！', mage: '隔空一弹，正中要害！'
       }[impact.kind] || `${name}抢到了关键位置！`;
     }
     return `${name}抢到了关键位置！`;
   }
-
   function startHighlight(winner, reason) {
     if (game.highlightFrames.length < 2) return;
     game.replay = { elapsed: 0, duration: HIGHLIGHT_SECONDS, title: highlightTitle(winner, reason) };
     $('replay-title').textContent = game.replay.title;
     $('replay-ui').hidden = false;
   }
-
   function seatLayout(count) {
     if (count <= 1) return [SINGLE_SEAT_SPOTS[Math.floor(Math.random() * SINGLE_SEAT_SPOTS.length)]];
     const layouts = count === 2 ? TWO_SEAT_LAYOUTS : THREE_SEAT_LAYOUTS;
     return layouts[Math.floor(Math.random() * layouts.length)].map(spot => [...spot]);
   }
-
   function seatSignature(spots) {
     return spots.map(spot => `${spot[0]}:${spot[1]}`).sort().join('|');
   }
-
   function nearestSeat(point) {
     let best = null, bestDistance = Infinity;
     for (const seat of game.seats) {
@@ -408,7 +387,6 @@
     }
     return best;
   }
-
   function seatTargetAwayFrom(index) {
     const pool = game.seats.length > 1 ? MULTI_SEAT_SPOTS : SINGLE_SEAT_SPOTS;
     const seat = game.seats[index];
@@ -428,14 +406,13 @@
     }
     return best;
   }
-
   function newRound() {
     game.round++;
     clearHighlight();
     game.lastImpact = null;
     game.playTipTime = game.round === 1 && game.mode !== 'demo' ? 4 : 0;
     $('play-tip').classList.toggle('show', game.playTipTime > 0);
-    game.capture = [0, 0];
+    game.capture = Array(players.length).fill(0);
     game.standoff = false;
     game.standoffTime = 0;
     game.standoffShown = false;
@@ -445,8 +422,8 @@
     let spots = seatLayout(game.matchSofas);
     for (let attempt = 0; attempt < 4 && game.matchSofas > 1 && seatSignature(spots) === game.lastSeatLayout; attempt++) spots = seatLayout(game.matchSofas);
     game.lastSeatLayout = seatSignature(spots);
-    game.seats = spots.map(([x, y]) => ({ x, y, capture: [0, 0], scale: 1 }));
-    const choices = RULE_IDS.filter(id => id !== game.previousRule);
+    game.seats = spots.map(([x, y]) => ({ x, y, capture: Array(players.length).fill(0), scale: 1 }));
+    const choices = RULE_IDS.filter(id => id !== game.previousRule && !(players.length > 2 && id === 'mash'));
     const ruleId = forcedRule || choices[Math.floor(Math.random() * choices.length)];
     game.rule = RULES[ruleId];
     game.previousRule = ruleId;
@@ -474,13 +451,12 @@
       chaos: '混沌模式：所有机制随机砸下来！'
     }[ruleId] || '';
     resetPlayers();
-    const suddenDeath = game.scores[0] === WIN_SCORE - 1 && game.scores[1] === WIN_SCORE - 1;
+    const suddenDeath = game.scores.filter(s => s === WIN_SCORE - 1).length >= 2;
     showBanner(`第 ${game.round} 回合 · ${game.rule.name}${suddenDeath ? ' · 决胜分！' : ''}`, suddenDeath ? 1.6 : 1.1);
     if (suddenDeath) tone(520, .2, 'triangle', .06, 1.35);
     updateRuleHud();
     updateHud();
   }
-
   function startMatch() {
     if (document.activeElement && typeof document.activeElement.blur === 'function') document.activeElement.blur();
     keys.clear();
@@ -505,26 +481,35 @@
       const fresh = candidates.filter(id => id !== game.lastCpuPick);
       const pool = fresh.length ? fresh : candidates;
       const cpuPick = pool[Math.floor(Math.random() * pool.length)];
-      game.picks = [game.manualPicks[0], cpuPick];
       game.lastCpuPick = cpuPick;
+      const aiPicks = [cpuPick];
+      const aiPool = [...pool];
+      const wantedCount = Math.max(2, Math.min(4, game.localPlayerCount || 2));
+      while (aiPicks.length < wantedCount - 1 && aiPool.length) {
+        aiPicks.push(aiPool.splice(Math.floor(Math.random() * aiPool.length), 1)[0]);
+      }
+      game.picks = [game.manualPicks[0], ...aiPicks];
     } else {
       game.picks = [...game.manualPicks];
     }
     syncMode();
+    const matchPlayers = game.mode === 'cpu' || game.mode === 'chaos' ? Math.max(2, Math.min(4, game.localPlayerCount || 2)) : game.mode === 'online' ? Math.max(2, Math.min(4, onlineRoomSize || 2)) : 2;
     // Demo matches rotate the sofa count so the showcase shows off every layout.
     // Chaos mode always uses a single sofa, only the sofa state changes.
     game.matchSofas = game.mode === 'demo' ? 1 + Math.floor(Math.random() * 3) : game.mode === 'chaos' ? 1 : game.sofaCount;
     document.body.classList.toggle('multi-sofa', game.matchSofas > 1);
-    game.scores = [0, 0];
-    game.combo = [0, 0];
-    game.maxCombo = [0, 0];
+    players = Array.from({ length: matchPlayers }, (_, i) => players[i] || makePlayer(i));
+    game.playerCount = matchPlayers;
+    game.scores = Array(matchPlayers).fill(0);
+    game.combo = Array(matchPlayers).fill(0);
+    game.maxCombo = Array(matchPlayers).fill(0);
     game.round = 0;
     game.tiedRounds = 0;
     game.ruleHistory = [];
-    game.mashCounts = [0, 0];
+    game.mashCounts = Array(matchPlayers).fill(0);
     game.morphT = 0; game.morphPhase = -1;
     game.chaosTimer = 0; game.chaosNext = 0;
-    game.mashWins = [0, 0];
+    game.mashWins = Array(matchPlayers).fill(0);
     game.morphT = 0; game.morphPhase = -1;
     game.previousRule = null;
     game.lastSeatLayout = '';
@@ -541,7 +526,6 @@
     tone(450, .13);
     startBackgroundMusic();
   }
-
   function scorePoint(winner, reason, seat) {
     if (game.phase !== 'playing') return;
     game.standoff = false;
@@ -551,7 +535,7 @@
     $('play-tip').classList.remove('show');
     game.scores[winner]++;
     game.combo[winner]++;
-    game.combo[1 - winner] = 0;
+    for (let j = 0; j < players.length; j++) if (j !== winner) game.combo[j] = 0;
     game.maxCombo[winner] = Math.max(game.maxCombo[winner], game.combo[winner]);
     if (game.combo[winner] >= 2) {
       showBanner(`${CHARACTERS[game.picks[winner]].name} ${game.combo[winner]} 连击！`, 1.2);
@@ -565,21 +549,19 @@
     game.shake = .18;
     burst(spot.x, spot.y - 35, winner, 30);
     react(players[winner], 'happy', 2.8, true);
-    react(players[1 - winner], 'sad', 2.2);
+    for (const p of players) if (p.i !== winner) react(p, 'sad', 2.2);
     const name = CHARACTERS[game.picks[winner]].name;
     showBanner(reason === 'draw' ? `${name}赢得平局抽签！` : reason === 'mash' ? `${name}手速碾压！` : reason === 'closest' ? `${name}更近一步！` : reason === 'timeout' ? `${name}险胜！` : `${name}抢到了！`, 1.65);
     characterSound(players[winner], 'win');
-    characterSound(players[1 - winner], 'lose');
+    for (const p of players) if (p.i !== winner) characterSound(p, 'lose');
     updateHud();
   }
-
   function finishMatch() {
     game.phase = 'finished';
     document.body.classList.add('match-finished');
-    const winner = game.scores[0] > game.scores[1] ? 0 : 1;
+    const winner = game.scores.indexOf(Math.max(...game.scores));
     updateStats(winner);
     stopBackgroundMusic();
-
     // Keep the host snapshot loop alive for the final result, but never queue old input into a rematch.
     if (game.mode === 'online') {
       $('online-game-hud').hidden = true;
@@ -589,30 +571,36 @@
       stickEnd();
       $('again-btn').disabled = false;
     }
-
     const localWinner = game.mode === 'online' ? onlinePlayerNumber : 0;
     $('result-title').textContent = `${CHARACTERS[game.picks[winner]].name}霸占沙发！`;
     $('result-subtitle').textContent = game.mode === 'demo' ? '自动演示即将重新开始。' : winner === localWinner ? '这张沙发，今晚归你。' : game.mode === 'online' ? '惜败！点“再来一局”马上重赛。' : '再抢一次？';
     $('result-rule').textContent = `最近规则：${game.ruleHistory.slice(-3).map(id => RULES[id].name).join(' → ')}`;
     const statsEl = $('result-stats');
     if (statsEl) {
-      const best = Math.max(game.maxCombo[0], game.maxCombo[1]);
-      statsEl.textContent = `本局之最：最高连击 ×${best}${game.mashWins ? ' · 角力 ' + (game.mashWins[0] + game.mashWins[1]) + ' 胜' : ''}`;
+      const best = Math.max(...game.maxCombo);
+      statsEl.textContent = `本局之最：最高连击 ×${best}${players.length > 2 ? ' · ' + game.scores.map((s, i) => `${CHARACTERS[game.picks[i]].name} ${s}分`).join(' · ') : game.mashWins ? ' · 角力 ' + (game.mashWins[0] + game.mashWins[1]) + ' 胜' : ''}`;
     }
     $('result-icon').textContent = winner === localWinner ? '🏆' : '🛋️';
     $('result-screen').classList.add('visible');
     if (game.mode === 'demo') game.wait = 3.5;
   }
-
   function syncMode() {
     document.querySelectorAll('.mode').forEach(btn => btn.classList.toggle('active', btn.dataset.mode === game.mode));
     const waitingForOpponent = (game.mode === 'cpu' || game.mode === 'chaos') && !document.body.classList.contains('in-match');
-    $('start-btn').firstChild.textContent = game.mode === 'demo' ? '开始观看演示 ' : game.mode === 'online' ? '进入联网模式 ' : game.mode === 'chaos' ? '开始混沌抢沙发 ' : '开始抢沙发 ';
+    $('start-btn').firstChild.textContent = game.mode === 'demo' ? '开始观看演示 ' : game.mode === 'online' ? '进入联网模式 ' : game.mode === 'chaos' ? '开始混沌抢沙发 ' : '开始人机抢沙发 ';
+    $('count-selector').hidden = !(game.mode === 'cpu' || game.mode === 'chaos');
     const local = localPlayerIndex();
     // Never dereference a partial network pick array while a lobby/match transition is rendering.
-    const displayed = [0, 1].map(i => CHARACTERS[game.picks[i]] || CHARACTERS[game.manualPicks[i]] || CHARACTERS[CHARACTER_IDS[i]] || CHARACTERS[CHARACTER_IDS[0]]);
-    $('player-a-label').textContent = game.mode === 'online' ? `${local === 0 ? '你' : '对手'}·${displayed[0].name}` : `${game.mode === 'demo' ? '电脑' : '玩家一'}·${displayed[0].name}`;
-    $('player-b-label').textContent = waitingForOpponent ? '随机对手' : game.mode === 'online' ? `${local === 1 ? '你' : '对手'}·${displayed[1].name}` : `${game.mode === 'demo' || game.mode === 'cpu' || game.mode === 'chaos' ? '电脑' : '玩家二'}·${displayed[1].name}`;
+    const displayed = players.map((_, i) => CHARACTERS[game.picks[i]] || CHARACTERS[game.manualPicks[i]] || CHARACTERS[CHARACTER_IDS[i % CHARACTER_IDS.length]] || CHARACTERS[CHARACTER_IDS[0]]);
+    const ownCharacter = CHARACTERS[game.picks[localPlayerIndex()]] || displayed[0];
+    const firstOpponent = CHARACTERS[game.picks[1 - localPlayerIndex()]] || displayed[1];
+    $('player-a-label').textContent = game.mode === 'online'
+      ? (waitingForOpponent ? '你' : `你·${ownCharacter.name}`)
+      : `${game.mode === 'demo' ? '电脑' : '玩家一'}·${displayed[0].name}`;
+    $('player-b-label').textContent = waitingForOpponent ? '随机对手'
+      : game.mode === 'online'
+        ? (onlineRoomSize > 2 ? `对手 ×${onlineRoomSize - 1}` : `对手·${firstOpponent.name}`)
+        : `${game.mode === 'demo' || game.mode === 'cpu' || game.mode === 'chaos' ? '电脑' : '玩家二'}·${displayed[1].name}`;
     const enemySkill = displayed[1].skill;
     $('player-b-label').title = waitingForOpponent ? '本局对手角色随机' : `技能：${enemySkill.name} · ${enemySkill.description}`;
     for (let i = 0; i < 2; i++) {
@@ -648,7 +636,6 @@
       }
     }
   }
-
   function renderPickers() {
     for (let side = 0; side < 2; side++) {
       const container = $(side ? 'picker-b' : 'picker-a');
@@ -683,7 +670,6 @@
     $('skill-note-b').textContent = describe(second);
     $('skill-note-b').hidden = game.mode !== 'duo';
   }
-
   function returnToMenu(mode) {
     game.mode = mode;
     game.picks = [...game.manualPicks];
@@ -735,9 +721,7 @@
     updateHud();
     if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
   }
-
   function stopDemo() { returnToMenu('cpu'); }
-
   function togglePause() {
     if (game.mode === 'online' || !['playing', 'countdown', 'roundEnd'].includes(game.phase)) return;
     game.paused = !game.paused;
@@ -749,7 +733,6 @@
     $('pause-screen').classList.toggle('visible', game.paused);
     updateHud();
   }
-
   function enterFullscreen() {
     if (document.fullscreenElement) return;
     const wrap = document.querySelector('.game-wrap');
@@ -757,17 +740,15 @@
     if (request && typeof request.catch === 'function') request.catch(() => document.body.classList.add('presentation'));
     else document.body.classList.add('presentation');
   }
-
   function exitFullscreen() {
     if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
     document.body.classList.remove('presentation');
   }
-
   function makePoster() {
     const poster = document.createElement('canvas');
     poster.width = 1080; poster.height = 1440;
     const g = poster.getContext('2d');
-    const winner = game.scores[0] > game.scores[1] ? 0 : 1;
+    const winner = game.scores.indexOf(Math.max(...game.scores));
     const winningName = CHARACTERS[game.picks[winner]].name;
     const title = winner === 0 ? '今晚沙发归我！' : `${winningName}抢到了沙发！`;
     const fillRound = (x, y, w, h, r, color) => { g.fillStyle = color; g.beginPath(); roundedPath(g, x, y, w, h, r); g.fill(); };
@@ -781,9 +762,25 @@
     g.fillStyle = '#2b3140'; g.font = '900 74px sans-serif'; g.fillText(title, 76, 319);
     g.fillStyle = '#807f87'; g.font = '600 29px sans-serif'; g.fillText(`最近规则：${game.ruleHistory.slice(-3).map(id => RULES[id].name).join(' → ')}`, 80, 378);
     fillRound(76, 430, 928, 128, 28, '#fff');
-    g.fillStyle = CHARACTERS[game.picks[0]].color; g.font = '900 66px sans-serif'; g.fillText(`${CHARACTERS[game.picks[0]].name}  ${game.scores[0]}`, 115, 513);
-    g.fillStyle = '#cbbfba'; g.font = '900 42px sans-serif'; g.fillText('VS', 510, 510);
-    g.fillStyle = CHARACTERS[game.picks[1]].color; g.font = '900 66px sans-serif'; g.textAlign = 'right'; g.fillText(`${game.scores[1]}  ${CHARACTERS[game.picks[1]].name}`, 965, 513); g.textAlign = 'left';
+    const panelCount = players.length;
+    if (panelCount <= 2) {
+      g.fillStyle = CHARACTERS[game.picks[0]].color; g.font = '900 66px sans-serif'; g.fillText(`${CHARACTERS[game.picks[0]].name}  ${game.scores[0]}`, 96, 510);
+      g.fillStyle = '#cbbfba'; g.font = '900 42px sans-serif'; g.fillText('VS', 510, 510);
+      g.fillStyle = CHARACTERS[game.picks[1]].color; g.font = '900 66px sans-serif'; g.textAlign = 'right'; g.fillText(`${game.scores[1]}  ${CHARACTERS[game.picks[1]].name}`, 984, 510); g.textAlign = 'left';
+    } else {
+      // Party match: one column per player, the current leader gets the crown.
+      const bestScore = Math.max(...game.scores);
+      game.picks.forEach((id, idx) => {
+        const character = CHARACTERS[id];
+        const cx = 76 + 928 * (idx + .5) / panelCount;
+        g.textAlign = 'center';
+        g.fillStyle = character.color; g.font = '900 54px sans-serif';
+        g.fillText(`${game.scores[idx]}  ${character.name}${game.scores[idx] === bestScore ? ' 👑' : ''}`, cx, 495);
+        g.fillStyle = '#9e8d83'; g.font = '600 24px sans-serif';
+        g.fillText(idx === 0 ? '你' : '电脑', cx, 533);
+      });
+      g.textAlign = 'left';
+    }
     g.save(); g.beginPath(); roundedPath(g, 76, 607, 928, 522, 30); g.clip(); g.drawImage(canvas, 0, 0, W, H, 76, 607, 928, 522); g.restore();
     fillRound(76, 1185, 928, 135, 28, '#ff6d53');
     g.fillStyle = '#fff'; g.font = '900 50px sans-serif'; g.fillText('你敢来抢吗？', 115, 1267);
@@ -801,27 +798,47 @@
     $('poster-status').textContent = '';
     $('poster-dialog').showModal();
   }
-
   function updateHud() {
     $('score-a').textContent = game.scores[0];
     $('score-b').textContent = game.scores[1];
     $('timer').textContent = Math.max(0, Math.ceil(game.time));
     $('cap-a').style.width = `${Math.min(100, game.capture[0] / CAPTURE_SECONDS * 100)}%`;
     $('cap-b').style.width = `${Math.min(100, game.capture[1] / CAPTURE_SECONDS * 100)}%`;
+    const extra = $('score-extra');
+    if (extra) {
+      if (players.length > 2) {
+        extra.hidden = false;
+        while (extra.children.length < players.length - 2) {
+          const chip = document.createElement('div');
+          chip.className = 'score-chip';
+          chip.innerHTML = '<span class="dot"></span><small></small><strong>0</strong><div class="capture-track"><span></span></div>';
+          extra.appendChild(chip);
+        }
+        for (let i = 2; i < players.length; i++) {
+          const chip = extra.children[i - 2];
+          const character = CHARACTERS[game.picks[i]] || CHARACTERS[CHARACTER_IDS[0]];
+          chip.querySelector('.dot').style.background = character.color;
+          chip.querySelector('small').textContent = (game.mode === 'online' ? '对手' : '电脑') + '·' + character.name;
+          chip.querySelector('strong').textContent = game.scores[i] ?? 0;
+          chip.querySelector('.capture-track span').style.width = Math.min(100, (game.capture[i] || 0) / CAPTURE_SECONDS * 100) + '%';
+        }
+      } else {
+        extra.hidden = true;
+      }
+    }
     const localPlayer = players[localPlayerIndex()];
     $('dash-touch').classList.toggle('cooling', localPlayer.skillCooldown > 0);
     $('dash-touch').querySelector('small').textContent = localPlayer.skillCooldown > 0 ? `${localPlayer.skillCooldown.toFixed(1)}s` : '↗';
     $('status-label').textContent = game.paused ? '已暂停' : game.replay ? '高光回放' : game.phase === 'playing' ? '抢沙发中' : game.phase === 'countdown' ? '准备开战' : game.phase === 'roundEnd' ? '本回合结束' : game.mode === 'demo' ? '自动演示' : '先到 3 分获胜';
     // Guest watchdog: the local timer keeps ticking between snapshots, so a
     // silent host stall (locked screen, dropped network) must be visible.
-    if (game.mode === 'online' && onlinePlayerNumber === 1 && onlineState === 'playing'
+if (game.mode === 'online' && onlinePlayerNumber !== 0 && onlinePlayerNumber !== null && onlineState === 'playing'
         && onlineLastSnapshotAt && performance.now() - onlineLastSnapshotAt > 3000) {
       $('status-label').textContent = '对方网络不稳定…';
-    } else if (game.mode === 'online' && onlinePlayerNumber === 1 && onlineHostReplaying) {
+} else if (game.mode === 'online' && onlinePlayerNumber !== 0 && onlinePlayerNumber !== null && onlineHostReplaying) {
       $('status-label').textContent = '对手精彩回放中…';
     }
   }
-
   // All instructions live in one help dialog so the start screen and mobile layout stay clean.
   function renderHelp() {
     const ruleItems = RULE_IDS.map(id => {
@@ -847,7 +864,6 @@
       <section><h3>房间规则 · 每回合随机</h3>${ruleItems}</section>
       <section><h3>角色技能 · 每人只能用自己的技能</h3>${characterItems}</section>`;
   }
-
   function pushAway(attacker, victim, power, stun) {
     const distance = dist(attacker, victim);
     const dx = distance > 1 ? (victim.x - attacker.x) / distance : attacker.facingX;
@@ -855,12 +871,26 @@
     let hit = false;
     if (victim.shieldLeft > 0 && !victim.shieldHit) {
       victim.shieldHit = true;
+      // Each block burns shield time: multi-block stays possible, but one
+      // activation can no longer counter every attack for its full duration.
+      victim.shieldLeft = Math.max(0, victim.shieldLeft - 0.75);
       attacker.dashLeft = 0;
-      attacker.stunned = Math.max(attacker.stunned, .3);
-      attacker.blink = .42;
-      attacker.impactLeft = .32;
-      attacker.vx = -dx * CHARACTERS[victim.characterId].skill.counterPower;
-      attacker.vy = -dy * CHARACTERS[victim.characterId].skill.counterPower;
+      const counterPower = CHARACTERS[victim.characterId].skill.counterPower || 400;
+      const counterVx = -dx * counterPower, counterVy = -dy * counterPower;
+      const firstBlock = !victim.shieldCountered;
+      victim.shieldCountered = true;
+      if (firstBlock) {
+        attacker.stunned = Math.max(attacker.stunned, .3);
+        attacker.blink = .42;
+        attacker.impactLeft = .32;
+        attacker.vx = counterVx;
+        attacker.vy = counterVy;
+      } else {
+        // Repeat blocks still deflect, but without the full counter punch.
+        attacker.blink = .3;
+        attacker.vx = -dx * 240;
+        attacker.vy = -dy * 240;
+      }
       react(victim, 'smug', .9);
       react(attacker, 'surprised', .5);
       burst(victim.x, victim.y - 15, victim.i, 22);
@@ -897,7 +927,6 @@
     }
     return hit;
   }
-
   // Register one handler per skill kind; character balance lives in characters.js.
   const skillHandlers = {
     dash(p, skill) {
@@ -910,20 +939,23 @@
     },
     shield(p, skill) {
       p.shieldLeft = skill.duration;
+      p.shieldCountered = false;
       p.shieldHit = false;
       burst(p.x, p.y - 10, p.i, 8);
       tone(570, .14, 'sine', .055);
     },
     pulse(p, skill) {
       p.pulseLeft = .32;
-      const other = players[1 - p.i];
-      if (dist(p, other) <= skill.radius) pushAway(p, other, skill.power, skill.stun);
+      for (const other of players) {
+        if (other === p) continue;
+        if (dist(p, other) <= skill.radius) pushAway(p, other, skill.power, skill.stun);
+      }
       burst(p.x, p.y, p.i, 20);
       tone(230, .2, 'triangle', .06);
     },
     blink(p, skill) {
       const from = { x: p.x, y: p.y };
-      const other = players[1 - p.i];
+      const other = nearestOpponent(p);
       const otherDistance = dist(p, other);
       const travel = otherDistance < skill.distance + 30 ? Math.max(0, otherDistance - 28) : skill.distance;
       const edge = playArea();
@@ -948,18 +980,18 @@
     },
     pull(p, skill) {
       p.pullLeft = .34;
-      const other = players[1 - p.i];
-      if (dist(p, other) <= skill.radius && pushAway(p, other, -skill.power, skill.stun)) {
-        const distance = dist(p, other) || 1;
-        other.reboundLeft = skill.rebound;
-        other.reboundX = (other.x - p.x) / distance;
-        other.reboundY = (other.y - p.y) / distance;
-        other.reboundPower = skill.reboundPower;
+      for (const other of players) {
+        if (other === p) continue;
+        if (dist(p, other) <= skill.radius && pushAway(p, other, -skill.power, skill.stun)) {
+          const distance = dist(p, other) || 1;
+          other.reboundLeft = skill.rebound;
+          other.reboundX = (other.x - p.x) / distance;
+          other.reboundY = (other.y - p.y) / distance;
+          other.reboundPower = skill.reboundPower;
+        }
       }
-      burst(p.x, p.y, p.i, 12);
-      tone(310, .2, 'sine', .055);
-    },
-    trap(p, skill) {
+      },
+      trap(p, skill) {
       p.trap = { x: p.x, y: p.y + 12, left: skill.duration, arm: skill.arm, radius: skill.radius, stun: skill.stun };
       burst(p.x, p.y + 12, p.i, 10);
       tone(480, .11, 'triangle', .045);
@@ -968,14 +1000,18 @@
       // Vampire: lifesteal + brief invulnerability (bat form)
       p.vampireLeft = skill.duration;
       p.shieldLeft = Math.max(p.shieldLeft, skill.duration * 0.6); // Partial invulnerability
-      const other = players[1 - p.i];
+      const other = nearestOpponent(p);
       if (dist(p, other) <= 80) {
-        // Lifesteal: stun opponent and knock them back slightly
-        other.stunned = Math.max(other.stunned, skill.stun);
-        other.impactLeft = .3;
-        react(other, 'dizzy', skill.stun);
-        react(p, 'smug', .5);
-        burst(other.x, other.y - 10, p.i, 16);
+        // Lifesteal bite: blockable like every other disable, and it drains
+        // part of the opponent's sofa-capture progress (吸取活力).
+        if (pushAway(p, other, 320, skill.stun)) {
+          let drained = 0;
+          for (const seat of game.seats) {
+            drained += seat.capture[other.i] * .5;
+            seat.capture[other.i] *= .5;
+          }
+          if (drained > 0) burst(p.x, p.y - 24, p.i, 10);
+        }
         tone(280, .18, 'sawtooth', .06, .7);
       }
       burst(p.x, p.y - 15, p.i, 12);
@@ -1002,7 +1038,7 @@
     },
     mage(p, skill) {
       // Mage: ranged magic projectile
-      const other = players[1 - p.i];
+      const other = nearestOpponent(p);
       const dx = other.x - p.x, dy = other.y - p.y;
       const distance = Math.hypot(dx, dy) || 1;
       p.mageProjectile = {
@@ -1018,18 +1054,16 @@
       tone(520, .14, 'triangle', .055, 1.2);
     }
   };
-
   function isAiPlayer(p) {
-    return game.mode === 'demo' || (p.i === 1 && (game.mode === 'cpu' || game.mode === 'chaos'));
+    if (game.mode === 'online') return false;
+    return game.mode === 'demo' || ((game.mode === 'cpu' || game.mode === 'chaos') && p.i >= 1 && p.i < (game.playerCount || 2));
   }
-
   // AI uses skills on a longer cooldown on lower difficulties, giving players more breathing room.
   function aiCooldownFactor(p) {
     if (!isAiPlayer(p)) return 1;
     const difficulty = game.difficulty || 'normal';
     return difficulty === 'easy' ? 1.45 : difficulty === 'normal' ? 1.2 : 1;
   }
-
   function useSkill(p, simultaneous = false) {
     if (game.phase !== 'playing' || game.paused || p.skillCooldown > 0 || (!simultaneous && p.stunned > 0)) return;
     const character = CHARACTERS[p.characterId];
@@ -1047,7 +1081,6 @@
     characterSound(p, 'skill');
     handler(p, skill);
   }
-
   const ruleHandlers = {
     shuffle(rule) {
       const index = game.ruleTarget && game.seats[game.ruleTarget.index] ? game.ruleTarget.index : Math.floor(Math.random() * game.seats.length);
@@ -1094,14 +1127,13 @@
       tone(190, .23, 'square', .045);
     }
   };
-
   // 贴身角力 (mash rule): while the rule is active and both players touch,
   // every skill-button press counts; the first side to reach the goal scores
   // a point and blasts the opponent away. Counting is authoritative on the
   // host (local presses + guest input flags), never on the guest client.
   function registerMash(p) {
     if (game.phase !== 'playing' || !game.rule || game.rule.id !== 'mash' || game.rulePhase !== 'active') return;
-    const other = players[1 - p.i];
+    const other = nearestOpponent(p);
     if (!other || dist(p, other) > game.rule.contactRange) return;
     game.mashCounts[p.i]++;
     burst(p.x, p.y - 26, p.i, 3);
@@ -1119,9 +1151,8 @@
       [1, 1.25, 1.5].forEach((mult, i) => setTimeout(() => tone(523 * mult, .12, 'triangle', .05, 1.02), i * 90));
     }
   }
-
   function updateRoomRule(dt) {
-    if (onlinePlayerNumber === 1) return; // The host owns sofa movement in online matches.
+if (game.mode === 'online' && onlinePlayerNumber !== 0 && onlinePlayerNumber !== null) return; // The host owns sofa movement in online matches.
     if (!game.rule || game.rule.id === 'frenzy' || game.rule.id === 'mash' || game.rulePhase === 'triggered') return;
     if (game.rule.id === 'morph') {
       // 沙发变变变: cycle the sofa between small and large; the capture ring
@@ -1174,11 +1205,10 @@
       updateRuleHud();
     }
   }
-
   function inputFor(p, dt) {
     p.wantsSkill = false;
-    if (game.mode === 'demo' || (p.i === 1 && (game.mode === 'cpu' || game.mode === 'chaos'))) {
-      const other = players[1 - p.i];
+    if (isAiPlayer(p)) {
+      const other = nearestOpponent(p);
       const skill = CHARACTERS[p.characterId].skill;
       const enemyDistance = dist(p, other);
       const nearOther = enemyDistance < 145;
@@ -1198,16 +1228,31 @@
         }
         targetSeat = best;
       }
+      const emptySeats = game.seats.filter(seat => !players.some(q => q !== p && dist(q, seat) < CAPTURE_RADIUS));
+      if (emptySeats.length && !emptySeats.includes(targetSeat) && Math.random() < .5) {
+        // Commit to an empty sofa half the time so a herd of AIs splits up
+        // instead of oscillating together and freezing every seat.
+        targetSeat = emptySeats[Math.floor(Math.random() * emptySeats.length)];
+      }
+      if (game.seats.length > 1 && players.length > 2 && targetSeat) {
+        const matesOnTarget = players.filter(q => q !== p && q.i !== 0 && dist(q, targetSeat) < CAPTURE_RADIUS).length;
+        if (matesOnTarget >= 1) {
+          let bestSeat = targetSeat, bestCount = Infinity;
+          for (const seat of game.seats) {
+            const count = players.filter(q => q !== p && dist(q, seat) < CAPTURE_RADIUS).length;
+            if (count < bestCount) { bestCount = count; bestSeat = seat; }
+          }
+          if (bestSeat && bestSeat !== targetSeat) targetSeat = bestSeat;
+        }
+      }
       const seatDistance = targetSeat ? dist(p, targetSeat) : 999;
       const nearSeat = Boolean(targetSeat) && seatDistance < 86;
       const contested = Boolean(targetSeat) && dist(other, targetSeat) < CAPTURE_RADIUS;
       const hostileTrap = other.trap;
-
       // Difficulty-based parameters
       const difficulty = game.difficulty || 'normal';
       const reactionTime = difficulty === 'easy' ? 1 : difficulty === 'normal' ? .75 : .4;
       const aggression = difficulty === 'easy' ? 0.3 : difficulty === 'normal' ? 0.5 : 0.7;
-
       // Trap avoidance (all difficulties)
       if (hostileTrap && hostileTrap.arm <= 0 && dist(p, hostileTrap) < hostileTrap.radius + 24) {
         let avoidX = p.x - hostileTrap.x, avoidY = p.y - hostileTrap.y;
@@ -1215,7 +1260,6 @@
         if (avoidLength === 1 && avoidX === 0 && avoidY === 0) avoidX = p.i ? 1 : -1;
         return { x: avoidX / avoidLength, y: avoidY / avoidLength };
       }
-
       // Hard difficulty: predict opponent blink/teleport and place trap
       if (difficulty === 'hard' && other.warpLeft > 0 && p.characterId === 'trap' && !p.trap && p.skillCooldown <= 0) {
         const otherSkill = CHARACTERS[other.characterId].skill;
@@ -1232,25 +1276,34 @@
           }
         }
       }
-
-      const target = nearSeat && (nearOther || contested) ? other : (targetSeat || other);
+      // Ninja shadow clone: bots sometimes mistake the clone for the real player
+      // and chase it until it fades (re-rolled per decision window, not per frame).
+      let chaseTarget = other;
+      if (other.ninjaClone && (nearOther || contested)) {
+        if (p.aiDecision <= 0) p.aiDeceived = Math.random() < 0.4;
+        if (p.aiDeceived) chaseTarget = { x: other.ninjaClone.x, y: other.ninjaClone.y };
+      }
+      const target = nearSeat && (nearOther || contested) ? chaseTarget : (targetSeat || other);
       let dx = target.x - p.x, dy = target.y - p.y;
+      // 多人模式下添加随机偏移，避免AI聚集在一起
+      if (players.length > 2 && Math.random() < 0.15) {
+        const angle = Math.random() * Math.PI * 2;
+        const offset = 60;
+        dx += Math.cos(angle) * offset;
+        dy += Math.sin(angle) * offset;
+      }
       const length = Math.hypot(dx, dy);
       if (nearSeat && !nearOther && !contested) return { x: 0, y: 0 };
       if (length > 1) { dx /= length; dy /= length; }
-
       // Easy difficulty: add slight movement noise
       if (difficulty === 'easy' && Math.random() < 0.1) {
         dx += (Math.random() - 0.5) * 0.3;
         dy += (Math.random() - 0.5) * 0.3;
       }
-
       p.aiDecision -= dt;
       const opposingSkill = CHARACTERS[other.characterId].skill.kind;
-
       // Per-difficulty skill attempt chance (checked once per decision window, not per frame)
       const attemptChance = difficulty === 'easy' ? 0.2 : difficulty === 'normal' ? 0.35 : 0.7;
-
       // Smarter skill usage based on difficulty
       let useNow = false;
       if (p.aiDecision <= 0 && other.stunned <= 0 && p.skillCooldown <= 0) {
@@ -1273,10 +1326,15 @@
         } else if (skill.kind === 'trap') {
           const goodSpot = nearSeat || enemyDistance < 115;
           useNow = !p.trap && goodSpot && Math.random() < attemptChance;
+        } else if (skill.kind === 'vampire') {
+          // The bite only lands within its 80px lifesteal range.
+          useNow = enemyDistance < 70 && Math.random() < attemptChance;
+        } else if (skill.kind === 'ninja') {
+          // Clone + boost: race a distant sofa or slip away from a close fight.
+          useNow = (seatDistance > 90 || enemyDistance < 140) && Math.random() < attemptChance;
         } else {
-          useNow = enemyDistance < skill.radius && Math.random() < attemptChance;
+          useNow = skill.radius != null && enemyDistance < skill.radius && Math.random() < attemptChance;
         }
-
         if (useNow) {
           const faceTarget = skill.kind === 'blink' ? target : other;
           const faceDistance = dist(p, faceTarget) || 1;
@@ -1294,14 +1352,30 @@
       }
       return { x: dx, y: dy };
     }
-    if (game.mode === 'online' && p.i === 1) {
-      // Input watchdog: a backgrounded/locked guest stops sending input, and
-      // without this their character would keep walking in the last direction.
-      const stale = onlineLastInputAt && performance.now() - onlineLastInputAt > 250;
-      if (stale) onlineOpponentInput.skill = false;
-      p.wantsSkill = stale ? false : onlineOpponentInput.skill;
-      onlineOpponentInput.skill = false;
-      return stale ? { x: 0, y: 0 } : { x: onlineOpponentInput.x, y: onlineOpponentInput.y };
+    if (game.mode === 'online' && p.i >= 1) {
+      if (onlinePlayerNumber === 0) {
+        // Host: every guest character walks with that guest's latest input,
+        // frozen (watchdog) when their device goes quiet mid-match.
+        const input = onlineGuestInputs[p.i - 1] || { x: 0, y: 0, skill: false };
+        const last = onlineLastInputAts[p.i - 1] || 0;
+        const stale = last && performance.now() - last > 250;
+        if (stale) input.skill = false;
+        p.wantsSkill = stale ? false : input.skill;
+        input.skill = false;
+        return stale ? { x: 0, y: 0 } : { x: input.x, y: input.y };
+      }
+      if (p.i === onlinePlayerNumber) {
+        // Guest predicts its own movement locally.
+        let x, y;
+        x = Number(keys.has('KeyD')) - Number(keys.has('KeyA')) + mobile.x;
+        y = Number(keys.has('KeyS')) - Number(keys.has('KeyW')) + mobile.y;
+        const length = Math.hypot(x, y);
+        if (length > 1) { x /= length; y /= length; }
+        return { x, y };
+      }
+      // Other guests are snapshot-interpolated; no local input.
+      p.wantsSkill = false;
+      return { x: 0, y: 0 };
     }
     let x, y;
     if (p.i === 0) {
@@ -1314,9 +1388,7 @@
     const length = Math.hypot(x, y);
     return length > 1 ? { x: x / length, y: y / length } : { x, y };
   }
-
   function dist(a, b) { return Math.hypot(a.x - b.x, a.y - b.y); }
-
   function updatePlayer(p, dt, move) {
     p.skillCooldown = Math.max(0, p.skillCooldown - dt);
     p.shieldLeft = Math.max(0, p.shieldLeft - dt);
@@ -1338,32 +1410,14 @@
       p.knightLeft = Math.max(0, p.knightLeft - dt);
       p.knightHitCooldown = Math.max(0, (p.knightHitCooldown || 0) - dt);
       // Knight rotating sword: check collision with opponent (can hit multiple times)
-      const other = players[1 - p.i];
-      const distance = dist(p, other);
-      if (distance <= p.knightRadius && p.knightHitCooldown <= 0) {
-        // Set cooldown to prevent continuous hitting every frame
-        p.knightHitCooldown = 0.3;
-        // Use pushAway to properly knock back the opponent
-        const dx = other.x - p.x, dy = other.y - p.y;
-        const dist = Math.hypot(dx, dy) || 1;
-        const pushPower = p.knightPower || 380;
-        other.vx = (dx / dist) * pushPower;
-        other.vy = (dy / dist) * pushPower;
-        other.stunned = Math.max(other.stunned, p.knightStun || 0.6);
-        other.impactLeft = .3;
-        other.blink = .2;
-        react(other, 'dizzy', p.knightStun || 0.6);
-        react(p, 'smug', .3);
-        burst(other.x, other.y - 10, p.i, 14);
-        game.shake = Math.max(game.shake, .15);
-        tone(200, .12, 'square', .06, .9);
+      for (const other of players) {
+        if (other === p) continue;
+        const distance = dist(p, other);
+        if (distance <= p.knightRadius && p.knightHitCooldown <= 0) {
+          p.knightHitCooldown = 0.3;
+          if (pushAway(p, other, p.knightPower || 380, p.knightStun || 0.6)) p.knightHitCooldown = 0.8;
+        }
       }
-      if (p.knightLeft <= 0) {
-        p.knightHit = false;
-        p.knightHitCooldown = 0;
-      }
-    }
-    if (p.ninjaLeft > 0) {
       p.ninjaLeft = Math.max(0, p.ninjaLeft - dt);
       if (p.ninjaClone) {
         p.ninjaClone.life -= dt;
@@ -1378,23 +1432,16 @@
       proj.x += proj.vx * dt;
       proj.y += proj.vy * dt;
       proj.life -= dt;
-      const other = players[1 - p.i];
-      if (dist({ x: proj.x, y: proj.y }, other) <= 30) {
-        // Hit opponent
-        other.stunned = Math.max(other.stunned, proj.stun);
-        other.impactLeft = .3;
-        const dx = other.x - proj.x, dy = other.y - proj.y;
-        const distance = Math.hypot(dx, dy) || 1;
-        other.vx = (dx / distance) * proj.power;
-        other.vy = (dy / distance) * proj.power;
-        react(other, 'dizzy', proj.stun);
-        react(p, 'happy', .35);
-        burst(other.x, other.y - 10, p.i, 16);
-        game.lastImpact = { side: p.i, kind: 'mage', time: game.time };
-        game.shake = Math.max(game.shake, .12);
-        tone(480, .1, 'triangle', .055, 1.1);
-        p.mageProjectile = null;
-      } else if (proj.life <= 0) {
+      for (const other of players) {
+        if (other === p) continue;
+        if (dist({ x: proj.x, y: proj.y }, other) <= 30) {
+          // Route through pushAway so shields can block the bolt like any other hit.
+          pushAway(p, other, proj.power, proj.stun);
+          p.mageProjectile = null;
+          break;
+        }
+      }
+      if (p.mageProjectile && p.mageProjectile.life <= 0) {
         p.mageProjectile = null;
       }
     }
@@ -1419,7 +1466,7 @@
       if (p.speedBoost > 0) speed *= (p.boostFactor || 1.5);
       // Rubber band: the trailing player gets a gentle boost so matches stay
       // tense until the last point (applies identically on host and guest).
-      if (game.phase === 'playing' && game.scores[1 - p.i] > game.scores[p.i]) speed *= 1.08;
+      if (game.phase === 'playing' && players.some(q => q !== p && game.scores[q.i] > game.scores[p.i])) speed *= 1.08;
       p.vx = move.x * speed;
       p.vy = move.y * speed;
       if (Math.hypot(move.x, move.y) > .15) {
@@ -1444,59 +1491,71 @@
       game.shake = Math.max(game.shake, .14);
     }
   }
-
   function collide() {
-    const a = players[0], b = players[1];
-    const d = dist(a, b);
-    if (d >= 50) return;
-    const nx = (b.x - a.x) / (d || 1), ny = (b.y - a.y) / (d || 1);
-    const overlap = (50 - d) / 2;
-    a.x -= nx * overlap; a.y -= ny * overlap;
-    b.x += nx * overlap; b.y += ny * overlap;
-    // Juice for plain body squeezes: thud + shake + sparkle only. Physics
-    // stay byte-identical to the authored collision (a per-frame correction
-    // cap here was tried and nerfed dashing hard, so it stays untouched).
-    if (overlap > 6 && performance.now() - lastBumpAt > 280) {
-      lastBumpAt = performance.now();
-      tone(150 + Math.random() * 40, .07, 'square', .04, .7);
-      game.shake = Math.max(game.shake, .09);
-      burst((a.x + b.x) / 2, (a.y + b.y) / 2 - 10, a.i, 5);
-    }
-    const dashHits = [[a, b], [b, a]].filter(([attacker]) => attacker.dashLeft > 0 && !attacker.dashHit);
-    for (const [attacker, victim] of dashHits) {
-      attacker.dashHit = true;
-      pushAway(attacker, victim, CHARACTERS[attacker.characterId].skill.power, .36);
-    }
-    for (const [guard, other] of [[a, b], [b, a]]) {
-      if (guard.shieldLeft > 0 && !guard.shieldHit && other.dashLeft <= 0 && !(other.shieldLeft > 0 && !other.shieldHit)) {
-        guard.shieldHit = true;
-        pushAway(guard, other, CHARACTERS[guard.characterId].skill.counterPower, .26);
+    for (let pi = 0; pi < players.length; pi++) {
+      for (let pj = pi + 1; pj < players.length; pj++) {
+        const a = players[pi], b = players[pj];
+        const d = dist(a, b);
+        // AI之间的排斥力，防止聚集
+        if (d < 80 && isAiPlayer(a) && isAiPlayer(b) && players.length > 2) {
+          const nx = (b.x - a.x) / (d || 1), ny = (b.y - a.y) / (d || 1);
+          const repulsion = (80 - d) * 2;
+          a.vx -= nx * repulsion; a.vy -= ny * repulsion;
+          b.vx += nx * repulsion; b.vy += ny * repulsion;
+        }
+        if (d >= 50) continue;
+        const nx = (b.x - a.x) / (d || 1), ny = (b.y - a.y) / (d || 1);
+        const overlap = (50 - d) / 2;
+        a.x -= nx * overlap; a.y -= ny * overlap;
+        b.x += nx * overlap; b.y += ny * overlap;
+        // Juice for plain body squeezes: thud + shake + sparkle only. Physics
+        // stay byte-identical to the authored collision (a per-frame correction
+        // cap here was tried and nerfed dashing hard, so it stays untouched).
+        if (overlap > 6 && performance.now() - lastBumpAt > 280) {
+          lastBumpAt = performance.now();
+          tone(150 + Math.random() * 40, .07, 'square', .04, .7);
+          game.shake = Math.max(game.shake, .09);
+          burst((a.x + b.x) / 2, (a.y + b.y) / 2 - 10, a.i, 5);
+        }
+        const dashHits = [[a, b], [b, a]].filter(([attacker]) => attacker.dashLeft > 0 && !attacker.dashHit);
+        for (const [attacker, victim] of dashHits) {
+          attacker.dashHit = true;
+          pushAway(attacker, victim, CHARACTERS[attacker.characterId].skill.power, .36);
+        }
+        for (const [guard, other] of [[a, b], [b, a]]) {
+          if (guard.shieldLeft > 0 && !guard.shieldHit && other.dashLeft <= 0 && !(other.shieldLeft > 0 && !other.shieldHit)) {
+            guard.shieldHit = true;
+            pushAway(guard, other, CHARACTERS[guard.characterId].skill.counterPower, .26);
+          }
+        }
       }
     }
   }
-
   function updateTraps() {
     for (const owner of players) {
       const trap = owner.trap;
       if (!trap || trap.arm > 0) continue;
-      const victim = players[1 - owner.i];
-      if (dist(victim, trap) > trap.radius) continue;
-      if (victim.shieldLeft > 0 && !victim.shieldHit) {
-        victim.shieldHit = true;
-        react(victim, 'smug', .8);
-        game.lastImpact = { side: victim.i, kind: 'shield', time: game.time };
-        characterSound(victim, 'block');
-      } else {
-        victim.dashLeft = 0;
-        victim.vx = 0;
-        victim.vy = 0;
-        victim.stunned = Math.max(victim.stunned, trap.stun);
-        victim.blink = .45;
-        victim.impactLeft = .3;
-        react(victim, 'dizzy', trap.stun);
-        react(owner, 'happy', .7);
-        game.lastImpact = { side: owner.i, kind: 'trap', time: game.time };
-        characterSound(victim, 'hit');
+      for (const victim of players) {
+        if (victim.i === owner.i) continue;
+        if (dist(victim, trap) > trap.radius) continue;
+              if (victim.shieldLeft > 0 && !victim.shieldHit) {
+                victim.shieldHit = true;
+                react(victim, 'smug', .8);
+                game.lastImpact = { side: victim.i, kind: 'shield', time: game.time };
+                characterSound(victim, 'block');
+              } else {
+                victim.dashLeft = 0;
+                victim.vx = 0;
+                victim.vy = 0;
+                victim.stunned = Math.max(victim.stunned, trap.stun);
+                victim.blink = .45;
+                victim.impactLeft = .3;
+                react(victim, 'dizzy', trap.stun);
+                react(owner, 'happy', .7);
+                game.lastImpact = { side: owner.i, kind: 'trap', time: game.time };
+                characterSound(victim, 'hit');
+              }
+        break;
       }
       owner.trap = null;
       game.shake = .1;
@@ -1505,7 +1564,6 @@
       tone(205, .16, 'square', .04, .8);
     }
   }
-
   function burst(x, y, side, count) {
     // Mobile perf guard: cap the particle pool so long chaotic fights never
     // accumulate thousands of draw calls.
@@ -1517,7 +1575,6 @@
       game.particles.push({ x, y, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed - 80, life: .45 + Math.random() * .5, max: 1, size: 3 + Math.random() * 5, color: colors[i % colors.length] });
     }
   }
-
   function updatePresentation(dt) {
     for (const p of players) {
       p.anim += dt;
@@ -1528,9 +1585,8 @@
       if (!p.emotionLeft && p.emotion !== 'neutral') p.emotion = 'neutral';
     }
   }
-
   function update(dt) {
-    if (game.mode === 'online' && onlinePlayerNumber === 1 && onlineState === 'playing') {
+if (game.mode === 'online' && onlinePlayerNumber !== 0 && onlinePlayerNumber !== null && onlineState === 'playing') {
       updateOnlineClient(dt);
       return;
     }
@@ -1545,13 +1601,13 @@
     // 混沌模式: every 3-5 seconds the room rule mutates into a different one,
     // so all sofa mechanics show up randomly within a single match.
     // This runs early to ensure mutations happen even during hitStop.
-    if (game.mode === 'chaos' && game.phase === 'playing') {
+    if (game.mode === 'chaos' && (game.phase === 'playing' || game.phase === 'countdown' || game.phase === 'roundEnd')) {
       game.chaosTimer = (game.chaosTimer || 0) + dt;
       if (!game.chaosNext) game.chaosNext = 3 + Math.random() * 2;
       if (game.chaosTimer >= game.chaosNext) {
         game.chaosTimer = 0;
         game.chaosNext = 3 + Math.random() * 2;
-        const pool = RULE_IDS.filter(id => id !== (game.rule && game.rule.id));
+        const pool = RULE_IDS.filter(id => id !== (game.rule && game.rule.id) && !(players.length > 2 && id === 'mash'));
         const newId = pool[Math.floor(Math.random() * pool.length)];
         game.rule = RULES[newId];
         game.previousRule = newId;
@@ -1615,7 +1671,7 @@
     // by the chosen difficulty (easy = leisurely, hard = relentless).
     if (game.rule && game.rule.id === 'mash' && game.rulePhase === 'active') {
       for (const p of players) {
-        const isAi = game.mode === 'demo' || (p.i === 1 && (game.mode === 'cpu' || game.mode === 'chaos'));
+        const isAi = isAiPlayer(p);
         if (!isAi) continue;
         const other = players[1 - p.i];
         if (!other || dist(p, other) > (game.rule.contactRange || 52)) { p.mashTimer = 0; continue; }
@@ -1632,17 +1688,35 @@
     const seated = players.map(p => game.seats.some(seat => dist(p, seat) < CAPTURE_RADIUS * (seat.scale || 1) && p.stunned <= 0));
     let standoff = false;
     for (const seat of game.seats) {
-      const inside = players.map(p => dist(p, seat) < CAPTURE_RADIUS * (seat.scale || 1) && p.stunned <= 0);
-      if (inside[0] !== inside[1]) {
-        const i = inside[0] ? 0 : 1;
-        if (seated[1 - i]) { standoff = true; continue; }
+      const insideIdx = players.map((p, i) => dist(p, seat) < CAPTURE_RADIUS * (seat.scale || 1) && p.stunned <= 0 ? i : -1).filter(i => i >= 0);
+      if (players.length > 2) {
+        // Party mode: no cross-seat freeze — concurrent capture, first sofa filled wins.
+        if (insideIdx.length === 0) {
+          for (let j = 0; j < players.length; j++) seat.capture[j] = Math.max(0, seat.capture[j] - dt * .13);
+          continue;
+        }
+        if (insideIdx.length > 1) {
+          // Contested sofa: while rivals share it, nobody's fill advances —
+          // stand your ground to deny, or knock them off to resume capturing.
+          game.standoff = true;
+          for (const j of insideIdx) seat.capture[j] = Math.max(0, seat.capture[j] - dt * 1.2);
+          continue;
+        }
+        seat.capture[insideIdx[0]] += dt;
+        for (let j = 0; j < players.length; j++) if (!insideIdx.includes(j)) seat.capture[j] = Math.max(0, seat.capture[j] - dt * .13);
+        const filled = insideIdx.filter(i => seat.capture[i] >= CAPTURE_SECONDS);
+        if (filled.length) { scorePoint(filled[Math.floor(Math.random() * filled.length)], 'capture', seat); break; }
+        continue;
+      }
+      if (insideIdx.length === 1) {
+        const i = insideIdx[0];
+        if (players.some((_, j) => j !== i && seated[j])) { standoff = true; continue; }
         seat.capture[i] += dt;
-        seat.capture[1 - i] = Math.max(0, seat.capture[1 - i] - dt * .35);
+        for (let j = 0; j < players.length; j++) if (j !== i) seat.capture[j] = Math.max(0, seat.capture[j] - dt * .35);
         if (seat.capture[i] >= CAPTURE_SECONDS) { scorePoint(i, 'capture', seat); break; }
-      } else if (!inside[0]) {
-        seat.capture[0] = Math.max(0, seat.capture[0] - dt * .13);
-        seat.capture[1] = Math.max(0, seat.capture[1] - dt * .13);
-      } else if (inside[0] && inside[1]) {
+      } else if (insideIdx.length === 0) {
+        for (let j = 0; j < players.length; j++) seat.capture[j] = Math.max(0, seat.capture[j] - dt * .13);
+      } else {
         standoff = true;
       }
     }
@@ -1652,26 +1726,30 @@
       game.standoffShown = true;
       showBanner('沙发对峙 · 先把对手逼起身', 1.1);
     }
-    game.capture = game.seats.reduce((best, seat) => [Math.max(best[0], seat.capture[0]), Math.max(best[1], seat.capture[1])], [0, 0]);
+    game.capture = players.map((_, j) => Math.max(...game.seats.map(seat => seat.capture[j] || 0)));
     // Capture heartbeat: as someone closes in on a point, a soft tick speeds up
     // the tension (throttled; audio only, zero gameplay effect).
-    const closingIn = Math.max(game.capture[0], game.capture[1]);
+    const closingIn = Math.max(...game.capture);
     if (closingIn > .9 && performance.now() - lastCaptureTickAt > (closingIn > 1.3 ? 260 : 420)) {
       lastCaptureTickAt = performance.now();
       tone(760 + Math.round(closingIn * 120), .045, 'square', .028);
     }
     if (game.time <= 0 && game.phase === 'playing' && game.seats.length) {
-      const totals = game.seats.reduce((sum, seat) => [sum[0] + seat.capture[0], sum[1] + seat.capture[1]], [0, 0]);
-      if (Math.abs(totals[0] - totals[1]) > .01) {
-        scorePoint(totals[0] > totals[1] ? 0 : 1, 'timeout');
+      const totals = players.map((_, i) => game.seats.reduce((sum, seat) => sum + seat.capture[i], 0));
+      const maxTotal = Math.max(...totals);
+      const leaders = totals.map((t, i) => ({ t, i })).filter(x => Math.abs(x.t - maxTotal) <= .01);
+      if (leaders.length === 1) {
+        scorePoint(leaders[0].i, 'timeout');
       } else {
         const distances = players.map(p => Math.min(...game.seats.map(seat => dist(p, seat))));
-        if (Math.abs(distances[0] - distances[1]) > 1) {
-          scorePoint(distances[0] < distances[1] ? 0 : 1, 'closest');
+        const minDistance = Math.min(...distances);
+        const closest = distances.map((d, i) => ({ d, i })).filter(x => Math.abs(x.d - minDistance) <= 1);
+        if (closest.length === 1) {
+          scorePoint(closest[0].i, 'closest');
         } else {
           game.tiedRounds++;
           if (game.tiedRounds >= 2) {
-            scorePoint(Math.random() < .5 ? 0 : 1, 'draw');
+            const fallback = closest.length ? closest[Math.floor(Math.random() * closest.length)].i : Math.floor(Math.random() * players.length);            scorePoint(fallback, 'draw');
           } else {
             game.phase = 'roundEnd'; game.wait = 1.5;
             game.playTipTime = 0;
@@ -1684,7 +1762,6 @@
     }
     updateHud();
   }
-
   function roundedPath(g, x, y, w, h, radius) {
     const r = Math.max(0, Math.min(radius, w / 2, h / 2));
     g.moveTo(x + r, y);
@@ -1694,9 +1771,7 @@
     g.lineTo(x, y + r); g.arcTo(x, y, x + r, y, r);
     g.closePath();
   }
-
   function roundRect(x, y, w, h, r, fill) { ctx.fillStyle = fill; ctx.beginPath(); roundedPath(ctx, x, y, w, h, r); ctx.fill(); }
-
   function drawRoom(now) {
     ctx.fillStyle = '#e8d7bb'; ctx.fillRect(0, 0, W, H);
     ctx.fillStyle = '#fff3dc'; ctx.fillRect(0, 0, W, 116);
@@ -1748,7 +1823,6 @@
     ctx.globalAlpha = .1; ctx.fillStyle = '#fff';
     ctx.beginPath(); ctx.ellipse(380, 190, 180, 30, -.15, 0, 7); ctx.fill(); ctx.globalAlpha = 1;
   }
-
   function drawPlant(x, y) {
     roundRect(x - 23, y + 28, 46, 48, 5, '#c78361');
     roundRect(x - 26, y + 25, 52, 12, 5, '#e29b73');
@@ -1758,12 +1832,10 @@
     }
     ctx.fillStyle = '#7eaa86'; ctx.beginPath(); ctx.ellipse(x - 4, y - 14, 18, 39, -.15, 0, 7); ctx.fill();
   }
-
   function drawSofa(now) {
     const ordered = game.seats.map((seat, index) => ({ seat, index })).sort((a, b) => a.seat.y - b.seat.y);
     for (const { seat, index } of ordered) drawSeat(seat, index, now);
   }
-
   function drawSeat(seat, index, now) {
     const { x, y } = seat;
     const pulse = Math.sin(now / 250 + index * .8) * 2;
@@ -1812,7 +1884,6 @@
     ctx.fillText(game.seats.length > 1 ? `SEAT ${index + 1}${frozen ? ' · 对峙' : ''}` : 'ONLY ONE SEAT', x, y - 54);
     ctx.restore();
   }
-
   function drawTraps(now) {
     for (const owner of players) {
       const trap = owner.trap;
@@ -1842,19 +1913,17 @@
       ctx.restore();
     }
   }
-
   function playerMood(p) {
     if (p.stunned > 0) return 'dizzy';
     if (p.emotionLeft > 0) return p.emotion;
     if (game.phase === 'playing') {
       const onSeat = game.seats.some(seat => dist(p, seat) < CAPTURE_RADIUS);
-      if (game.capture[1 - p.i] > .55 && !onSeat) return 'worried';
+      if (players.some(q => q !== p && game.capture[q.i] > .55) && !onSeat) return 'worried';
       if (game.capture[p.i] > .55) return 'happy';
-      if (game.time < 5 && game.scores[p.i] < game.scores[1 - p.i]) return 'worried';
+      if (game.time < 5 && players.some(q => q !== p && game.scores[q.i] > game.scores[p.i])) return 'worried';
     }
     return 'neutral';
   }
-
   function drawFace(p, mood) {
     const eyeY = -10;
     const lookX = Math.max(-1, Math.min(1, p.facingX)) * 1.2;
@@ -1898,7 +1967,6 @@
     else ctx.arc(0, -4, 3.5, .15, Math.PI - .15);
     ctx.stroke();
   }
-
   function drawAccessory(p) {
     const { dark, light } = CHARACTERS[p.characterId];
     if (p.characterId === 'dash') {
@@ -1940,7 +2008,6 @@
       ctx.beginPath(); ctx.arc(0, -38, 3, 0, 7); ctx.fill();
     }
   }
-
   function drawPlayer(p, now) {
     const character = CHARACTERS[p.characterId];
     const { color, dark, light } = character;
@@ -2095,18 +2162,16 @@
     }
     ctx.restore();
   }
-
   function captureHighlight(now) {
     // The online guest never plays replays (only the host scores points), so
     // recording frames there is pure wasted CPU on the latency-sensitive device.
-    if (game.mode === 'online' && onlinePlayerNumber === 1) return;
+if (game.mode === 'online' && onlinePlayerNumber !== 0 && onlinePlayerNumber !== null) return;
     if (game.phase !== 'playing' || now - game.highlightClock < 1000 / HIGHLIGHT_FPS) return;
     game.highlightClock = now;
     const frame = game.highlightFrames.length >= HIGHLIGHT_FRAME_COUNT ? game.highlightFrames.shift() : highlightPool[game.highlightFrames.length];
     frame.getContext('2d').drawImage(canvas, 0, 0, frame.width, frame.height);
     game.highlightFrames.push(frame);
   }
-
   let replayShade = null; // cached: identical every frame, allocation-free replays
   function renderHighlight() {
     const frames = game.highlightFrames;
@@ -2119,7 +2184,6 @@
     shade.addColorStop(0, '#20253455'); shade.addColorStop(.25, '#20253400'); shade.addColorStop(.75, '#20253400'); shade.addColorStop(1, '#20253466');
     ctx.fillStyle = shade; ctx.fillRect(0, 0, W, H);
   }
-
   // Mobile online players see the full arena squeezed into a tiny strip; a
   // player-following camera zooms the world drawing without touching physics,
   // inputs, or host sync. Desktop and local modes keep the plain full view.
@@ -2138,7 +2202,6 @@
     const y = Math.max(viewH / 2, Math.min(H - viewH / 2, targetY));
     return { scale, x, y };
   }
-
   function render(now) {
     ctx.clearRect(0, 0, W, H);
     if (game.replay && game.highlightFrames.length) {
@@ -2168,7 +2231,6 @@
     }
     captureHighlight(now);
   }
-
   function frame(now) {
     const dt = Math.min(.033, (now - last) / 1000 || .016);
     last = now;
@@ -2176,7 +2238,6 @@
     render(now);
     requestAnimationFrame(frame);
   }
-
   document.querySelectorAll('.mode').forEach(btn => btn.addEventListener('click', () => {
     if (game.mode === 'online' && btn.dataset.mode !== 'online') {
       // The mode switch is an exit affordance: honor it even mid-match,
@@ -2327,7 +2388,6 @@
   };
   document.addEventListener('click', resumeAudioOnInteraction, { once: true, capture: true });
   document.addEventListener('touchstart', resumeAudioOnInteraction, { once: true, capture: true });
-
   // Auto-rotate to landscape fullscreen on mobile when match starts
   const tryAutoLandscape = () => {
     if (!narrowScreen()) return; // Only on mobile
@@ -2381,7 +2441,6 @@
   });
   document.addEventListener('keyup', event => keys.delete(event.code));
   window.addEventListener('blur', () => { keys.clear(); stickEnd(); });
-
   const stick = $('joystick'), knob = $('joystick-knob');
   function stickMove(e) {
     if (game.paused || !['playing', 'countdown'].includes(game.phase)) return;
@@ -2442,17 +2501,20 @@
     btn.style.background = character.color;
     btn.style.borderBottomColor = character.dark;
   }
-
   // Online Multiplayer (PeerJS WebRTC)
   // The host runs the real match; the guest sends its input and renders host snapshots.
   let network = null;
   let onlineState = 'menu'; // menu | waiting | select | playing
   let onlineRoomCode = null;
   let onlinePlayerNumber = null; // 0 = host, 1 = guest
-  let onlineMyCharacter = null;
-  let onlineOpponentCharacter = null;
-  let onlineMyReady = false;
-  let onlineOpponentReady = false;
+let GAME_VERSION = '15.8.6';      // handshake: mismatched versions between devices break the protocol
+let onlineRoomSize = 2;         // total seats including the host (2-4)
+let onlineCharacters = [];      // indexed by playerNumber: null | characterId
+let onlineReady = [];           // indexed by playerNumber
+let onlineGuestInputs = [];     // host side: per-guest input, indexed by playerNumber - 1
+let onlineRematchVotes = new Set();
+let onlineRematchForceTimer = null; // host: start anyway if a player stalls on the result screen
+let onlineSeatConfirmed = false; // guest: welcome (seat assignment) received
   let onlineLobbyEpoch = 0;
   let onlineMatchId = 0;
   let onlineOperation = 0;
@@ -2465,12 +2527,11 @@
   let onlineEchoAt = -Infinity;  // host-side arrival time of that input
   let onlineLastSnapshotAt = 0;  // guest-side: last time a host snapshot arrived
   let onlineImpactQueue = [];    // host-side: impact events waiting to be synced
-  let onlineLastInputAt = 0;     // host-side: last guest input arrival (watchdog)
+let onlineLastInputAts = [];     // host-side: last input arrival per guest seat (watchdog)
   let guestHitStop = 0;          // guest-side: brief freeze on synced impacts
   let onlineHostReplaying = false; // guest-side: host is showing a highlight replay
   let onlineReconnectTimer = null; // host-side grace window for a dropped guest
-  let remoteInterpolation = freshInterpolation();
-
+let remoteInterpolations = []; // guest side: one interpolation state per remote player index
   function freshInterpolation() {
     return {
       prevX: 0, prevY: 0, prevVX: 0, prevVY: 0,
@@ -2478,34 +2539,30 @@
       interpTime: 0, interpDuration: .06, lastUpdateTime: 0
     };
   }
-
-  function localPlayerIndex() { return game.mode === 'online' && onlinePlayerNumber === 1 ? 1 : 0; }
+  function localPlayerIndex() { return game.mode === 'online' && onlinePlayerNumber ? onlinePlayerNumber : 0; }
   function onlineConnected() { return Boolean(network && network.isConnected()); }
-
   function localMoveVector() {
     const x = Number(keys.has('KeyD') || keys.has('ArrowRight')) - Number(keys.has('KeyA') || keys.has('ArrowLeft')) + mobile.x;
     const y = Number(keys.has('KeyS') || keys.has('ArrowDown')) - Number(keys.has('KeyW') || keys.has('ArrowUp')) + mobile.y;
     const length = Math.hypot(x, y);
     return length > 1 ? { x: x / length, y: y / length } : { x, y };
   }
-
   function sendOnlineInput(skill = false) {
-    if (!onlineConnected() || onlinePlayerNumber !== 1 || onlineState !== 'playing') return false;
+    if (!onlineConnected() || onlinePlayerNumber === 0 || onlinePlayerNumber === null || onlineState !== 'playing') return false;
     if (!['playing', 'countdown'].includes(game.phase)) return false;
     const move = localMoveVector();
-    network.send('input', { x: move.x, y: move.y, skill: Boolean(skill), matchId: onlineMatchId });
+    network.send('input', { x: move.x, y: move.y, skill: Boolean(skill), matchId: onlineMatchId, seat: onlinePlayerNumber });
     return true;
   }
-
   function useLocalSkill() {
     if (game.mode === 'demo') return;
     // 贴身角力: human presses count as mashes (host side counts its own; the
     // online guest's presses are counted by the host from the input message).
-    if (!(game.mode === 'online' && onlinePlayerNumber === 1)) registerMash(players[localPlayerIndex()]);
-    if (game.mode === 'online' && onlinePlayerNumber === 1) {
+    if (!(game.mode === 'online' && onlinePlayerNumber)) registerMash(players[localPlayerIndex()]);
+    if (game.mode === 'online' && onlinePlayerNumber) {
       // Send a skill press immediately instead of adding another input-tick of latency.
       if (game.phase === 'playing') {
-        const me = players[1];
+        const me = players[onlinePlayerNumber];
         const skill = CHARACTERS[me.characterId] && CHARACTERS[me.characterId].skill;
         if (skill && me.skillCooldown <= 0 && me.stunned <= 0) {
           // Optimistic cast feedback: show the gesture and play the sound now.
@@ -2521,12 +2578,12 @@
         // 贴身角力: the host counts authoritatively, but the guest should still
         // hear its own taps instantly (audio is per-device).
         if (game.rule && game.rule.id === 'mash' && game.rulePhase === 'active' && me.stunned <= 0) {
-          const other = players[0];
+          const other = nearestOpponent(me);
           if (other && dist(me, other) <= (game.rule.contactRange || 52)) {
-            tone(300 + Math.min((game.mashCounts[1] || 0) + 1, 14) * 26, .05, 'triangle', .035, 1.08);
+            tone(300 + Math.min((game.mashCounts[onlinePlayerNumber] || 0) + 1, 14) * 26, .05, 'triangle', .035, 1.08);
             // Optimistic meter: bump locally for instant feedback; the next
             // snapshot reconciles with the host's authoritative count.
-            game.mashCounts[1] = Math.min((game.mashCounts[1] || 0) + 1, game.rule.mashGoal);
+            game.mashCounts[onlinePlayerNumber] = Math.min((game.mashCounts[onlinePlayerNumber] || 0) + 1, game.rule.mashGoal);
             updateRuleHud();
           }
         }
@@ -2537,7 +2594,6 @@
     }
     useSkill(players[0]);
   }
-
   function updateConnectionStatus(status) {
     const el = $('connection-status');
     if (!el) return;
@@ -2549,7 +2605,6 @@
     const lagEl = $('lag-indicator');
     if (lagEl) lagEl.hidden = status !== 'connected';
   }
-
   function showOnlineScreen(message) {
     // If we're already in an online session (waiting/select/playing), clean up first
     if (onlineState !== 'menu' && onlineConnected()) {
@@ -2571,11 +2626,9 @@
     onlineState = 'menu';
     updateConnectionStatus('disconnected');
   }
-
   function hideAllScreens() {
     document.querySelectorAll('.screen').forEach(s => s.classList.remove('visible'));
   }
-
   function onlineErrorText(error, fallback) {
     if (!error) return fallback;
     if (typeof error === 'string') return error;
@@ -2590,7 +2643,6 @@
     };
     return messages[error.type] || error.message || fallback;
   }
-
   function prepareOnlineLobby() {
     const operation = ++onlineOperation;
     const previous = network;
@@ -2616,18 +2668,16 @@
     updateConnectionStatus('connecting');
     return { operation, session };
   }
-
   function isCurrentOnlineOperation(operation, session) {
     return operation === onlineOperation && network === session;
   }
-
   async function createRoom(preferredCode) {
     if (typeof preferredCode !== 'string' || preferredCode.length !== 6) preferredCode = undefined;  // click events etc.
     const { operation, session } = prepareOnlineLobby();
     $('room-code').textContent = preferredCode || '------';
     document.querySelector('.waiting-text').textContent = preferredCode ? '正在恢复房间…' : '正在创建房间…';
     try {
-      const result = await session.createRoom(preferredCode);
+      const result = await session.createRoom(preferredCode, onlineRoomSize);
       if (!isCurrentOnlineOperation(operation, session)) {
         await session.leaveRoom();
         return;
@@ -2639,21 +2689,20 @@
       document.querySelector('.waiting-text').textContent = preferredCode ? '房间已恢复，等待对手重连…' : '把 6 位房间号发给好友，等待加入…';
       try { sessionStorage.setItem('sofa-host-room', onlineRoomCode); } catch (_) {}
       updateConnectionStatus('connected');
-      session.onPlayerJoin = () => {
+      session.onPlayerJoin = seat => {
         if (!isCurrentOnlineOperation(operation, session)) return;
         if (onlineState !== 'waiting' && onlineState !== 'select') return;
         if (onlineReconnectTimer) { clearTimeout(onlineReconnectTimer); onlineReconnectTimer = null; }
         enterOnlineSelect();
-        // Publish the authoritative epoch so any guest (first join, refreshed
-        // page, or same-page rejoin) lands on the same counter.
-        network.send('lobby', { epoch: onlineLobbyEpoch });
+        // Assign the seat, then publish the authoritative lobby to everyone.
+        network.sendTo(seat, 'welcome', { playerNumber: seat, size: onlineRoomSize, epoch: onlineLobbyEpoch, v: GAME_VERSION });
+        broadcastOnlineLobby();
       };
     } catch (error) {
       if (!isCurrentOnlineOperation(operation, session)) return;
       leaveOnlineRoom(onlineErrorText(error, '创建房间失败，请重试'));
     }
   }
-
   async function joinRoom() {
     const input = $('room-code-input').value;
     if (!input.trim()) {
@@ -2662,7 +2711,6 @@
     }
     await joinRoomByCode(input);
   }
-
   async function joinRoomByCode(input) {
     const { operation, session } = prepareOnlineLobby();
     $('room-code').textContent = '------';
@@ -2683,19 +2731,22 @@
       // page) converge on the host's counter instead of lockstep increments.
       network.send('hello', {});
     } catch (error) {
-      if (!isCurrentOnlineOperation(operation, session)) return;
+      if (!isCurrentOnlineOperation(operation, session)) {
+        await session.leaveRoom().catch(() => {});
+        return;
+      }
       leaveOnlineRoom(onlineErrorText(error, '加入房间失败，请重试'));
     }
   }
-
   function enterOnlineSelect(epoch) {
     if (Number.isInteger(epoch)) onlineLobbyEpoch = Math.max(onlineLobbyEpoch, epoch);
     else onlineLobbyEpoch++;
     onlineState = 'select';
-    onlineMyCharacter = null;
-    onlineOpponentCharacter = null;
-    onlineMyReady = false;
-    onlineOpponentReady = false;
+    onlineCharacters = Array(onlineRoomSize).fill(null);
+    onlineReady = Array(onlineRoomSize).fill(false);
+    onlineGuestInputs = Array(Math.max(0, onlineRoomSize - 1)).fill(null).map(() => ({ x: 0, y: 0, skill: false }));
+    onlineRematchVotes = new Set();
+    onlineSeatConfirmed = onlinePlayerNumber === 0;
     onlineOpponentInput = { x: 0, y: 0, skill: false };
     onlinePendingSkill = false;
     game.phase = 'menu';
@@ -2722,7 +2773,6 @@
     updateOnlineLobby();
     $('online-title').focus({ preventScroll: true });
   }
-
   function buildOnlinePicker() {
     const picker = $('online-picker');
     picker.innerHTML = '';
@@ -2739,76 +2789,115 @@
       picker.appendChild(btn);
     });
   }
-
+  function onlineConnectedSeats() {
+    const seats = [0];
+    if (network && network.playerNumber === 0) {
+      for (const entry of network.conns) if (entry.conn.open) seats.push(entry.playerNumber);
+    } else if (onlinePlayerNumber !== 0) {
+      seats.push(onlinePlayerNumber);
+    }
+    return seats;
+  }
+  function onlineLobbyReadyToStart() {
+    if (onlinePlayerNumber !== 0 || onlineState !== 'select') return false;
+    const connected = new Set(onlineConnectedSeats());
+    for (let seat = 0; seat < onlineRoomSize; seat++) {
+      if (!connected.has(seat)) return false;
+      if (!onlineCharacters[seat] || !onlineReady[seat]) return false;
+    }
+    return true;
+  }
+  function broadcastOnlineLobby() {
+    if (onlinePlayerNumber !== 0 || !onlineConnected()) return;
+    network.send('lobby', {
+      epoch: onlineLobbyEpoch,
+      size: onlineRoomSize,
+      characters: [...onlineCharacters],
+      ready: [...onlineReady],
+      connected: onlineConnectedSeats(),
+      v: GAME_VERSION
+    });
+  }
   function updateOnlineLobby() {
-    const ownName = onlineMyCharacter && CHARACTERS[onlineMyCharacter] ? CHARACTERS[onlineMyCharacter].name : '未选择';
-    const opponentName = onlineOpponentCharacter && CHARACTERS[onlineOpponentCharacter] ? CHARACTERS[onlineOpponentCharacter].name : '未选择';
-    $('online-p1-char').textContent = ownName;
-    $('online-p2-char').textContent = opponentName;
-    $('online-p1-ready').textContent = onlineMyReady ? '已准备' : '未准备';
-    $('online-p2-ready').textContent = onlineOpponentReady ? '已准备' : '未准备';
-    $('online-p1-status').classList.toggle('ready', onlineMyReady);
-    $('online-p2-status').classList.toggle('ready', onlineOpponentReady);
-    $('online-p1-status').querySelector(':scope > span').textContent = onlineMyReady ? '●' : '○';
-    $('online-p2-status').querySelector(':scope > span').textContent = onlineOpponentReady ? '●' : '○';
+    const myCharacter = onlineCharacters[onlinePlayerNumber];
+    const myReady = Boolean(onlineReady[onlinePlayerNumber]);
+    const container = $('online-lobby-players');
+    if (container) {
+      container.innerHTML = '';
+      const connected = new Set(onlineConnectedSeats());
+      for (let seat = 0; seat < onlineRoomSize; seat++) {
+        const mine = seat === onlinePlayerNumber;
+        const character = onlineCharacters[seat] && CHARACTERS[onlineCharacters[seat]] ? CHARACTERS[onlineCharacters[seat]].name : '未选择';
+        const ready = Boolean(onlineReady[seat]);
+        const row = document.createElement('div');
+        row.className = 'status-player' + (ready ? ' ready' : '');
+        const label = mine ? '你' : seat === 0 ? '房主' : `玩家${seat + 1}`;
+        const state = connected.has(seat) || mine ? '' : '（等待加入…）';
+        row.innerHTML = `<span>${ready ? '●' : '○'}</span><small>${label}${state}：<span>${character}</span></small><em>${ready ? '已准备' : '未准备'}</em>`;
+        container.appendChild(row);
+      }
+    }
     document.querySelectorAll('#online-picker .character-choice').forEach(btn => {
-      const selected = btn.dataset.character === onlineMyCharacter;
+      const selected = btn.dataset.character === myCharacter;
       btn.classList.toggle('selected', selected);
       btn.setAttribute('aria-pressed', String(selected));
-      btn.disabled = onlineMyReady;
+      btn.disabled = myReady;
     });
     const readyButton = $('online-ready-btn');
-    readyButton.disabled = !onlineMyCharacter || !onlineConnected();
-    readyButton.classList.toggle('is-ready', onlineMyReady);
-    readyButton.innerHTML = onlineMyReady ? '取消准备 <span>×</span>' : '准备好 <span>✓</span>';
-    document.querySelector('.select-hint').textContent = onlineMyReady && onlineOpponentReady
-      ? '双方已准备，即将开局…'
-      : onlineMyReady
-        ? '你已准备，等待对手点击“准备好”…'
-        : onlineOpponentReady
-          ? '对手已准备，请选角色并点击“准备好”'
-          : onlineMyCharacter
-            ? '角色已选好，点击“准备好”锁定角色'
-            : '请先选择角色，再点击“准备好”';
+    readyButton.disabled = !myCharacter || !onlineConnected() || !onlineSeatConfirmed;
+    readyButton.classList.toggle('is-ready', myReady);
+    readyButton.innerHTML = myReady ? '取消准备 <span>×</span>' : '准备好 <span>✓</span>';
+    const connectedCount = onlineConnectedSeats().length;
+    const everyoneReady = onlineCharacters.every((c, idx) => c && onlineReady[idx]);
+    document.querySelector('.select-hint').textContent = !onlineSeatConfirmed
+      ? '正在同步房间信息…'
+      : connectedCount < onlineRoomSize
+        ? `等待玩家加入（${connectedCount}/${onlineRoomSize}）…`
+        : everyoneReady
+          ? '全员已准备，即将开局…'
+          : myReady
+            ? '你已准备，等待其他人点击“准备好”…'
+            : onlineCharacters.some((c, idx) => idx !== onlinePlayerNumber && c)
+              ? '其他人已选好角色，点击“准备好”锁定你的选择'
+              : '请先选择角色，再点击“准备好”';
   }
-
   function selectOnlineCharacter(characterId) {
-    if (onlineState !== 'select' || onlineMyReady || !CHARACTERS[characterId]) return;
-    onlineMyCharacter = characterId;
+    if (onlineState !== 'select' || onlineReady[onlinePlayerNumber] || !CHARACTERS[characterId] || !onlineSeatConfirmed) return;
+    onlineCharacters[onlinePlayerNumber] = characterId;
     game.manualPicks[localPlayerIndex()] = characterId;
     game.picks[localPlayerIndex()] = characterId;
-    if (onlineConnected()) network.send('characterSelect', { character: characterId, epoch: onlineLobbyEpoch });
+    if (onlineConnected()) network.send('characterSelect', { character: characterId, epoch: onlineLobbyEpoch, seat: onlinePlayerNumber });
+    if (onlinePlayerNumber === 0) broadcastOnlineLobby();
     updateOnlineLobby();
   }
-
   function toggleOnlineReady() {
-    if (onlineState !== 'select' || !onlineConnected() || !onlineMyCharacter) return;
-    onlineMyReady = !onlineMyReady;
-    network.send('playerReady', { ready: onlineMyReady, character: onlineMyCharacter, epoch: onlineLobbyEpoch });
+    if (onlineState !== 'select' || !onlineConnected() || !onlineSeatConfirmed) return;
+    if (!onlineCharacters[onlinePlayerNumber]) return;
+    onlineReady[onlinePlayerNumber] = !onlineReady[onlinePlayerNumber];
+    network.send('playerReady', { ready: onlineReady[onlinePlayerNumber], character: onlineCharacters[onlinePlayerNumber], epoch: onlineLobbyEpoch, seat: onlinePlayerNumber });
+    if (onlinePlayerNumber === 0) broadcastOnlineLobby();
     updateOnlineLobby();
     maybeStartOnlineMatch();
   }
-
   function maybeStartOnlineMatch() {
-    if (onlinePlayerNumber !== 0 || onlineState !== 'select') return;
-    if (!onlineMyCharacter || !onlineOpponentCharacter || !onlineMyReady || !onlineOpponentReady) return;
-    startOnlineMatch();
+    if (onlineLobbyReadyToStart()) startOnlineMatch();
   }
-
   function startOnlineMatch() {
     if (onlinePlayerNumber !== 0 || !onlineConnected()) return;
-    const fromLobby = onlineState === 'select' && onlineMyCharacter && onlineOpponentCharacter && onlineMyReady && onlineOpponentReady;
+    const fromLobby = onlineState === 'select' && onlineLobbyReadyToStart();
     const fromResult = onlineState === 'playing' && game.phase === 'finished';
     if (!fromLobby && !fromResult) return;
     stopOnlineLoop();
     onlineMatchId++;
     onlineState = 'playing';
+    onlineRematchVotes = new Set();
+    if (onlineRematchForceTimer) { clearTimeout(onlineRematchForceTimer); onlineRematchForceTimer = null; }
     game.mode = 'online';
-    game.manualPicks = [onlineMyCharacter, onlineOpponentCharacter];
+    game.manualPicks = [...onlineCharacters];
     game.picks = [...game.manualPicks];
     hideAllScreens();
     $('online-game-hud').hidden = false;
-    $('online-opponent-name').textContent = `对手 · ${CHARACTERS[onlineOpponentCharacter].name}`;
+    $('online-opponent-name').textContent = onlineRoomSize > 2 ? `对手 ×${onlineRoomSize - 1}` : `对手 · ${CHARACTERS[onlineCharacters[1]] ? CHARACTERS[onlineCharacters[1]].name : ''}`;
     $('again-btn').disabled = false;
     onlineOpponentInput = { x: 0, y: 0, skill: false };
     startMatch();
@@ -2818,19 +2907,19 @@
       if (onlineConnected() && onlineState === 'playing') network.send('gameState', { state: buildOnlineSnapshot() });
     }, 50);
   }
-
   function beginOnlineClientMatch(picks, sofaCount, matchId, epoch) {
-    if (onlinePlayerNumber !== 1 || !Array.isArray(picks) || picks.length !== 2 || !picks.every(id => typeof id === 'string' && CHARACTERS[id])) return;
+    if (onlinePlayerNumber === 0 || onlinePlayerNumber === null || !Array.isArray(picks) || picks.length < 2 || picks.length > 4 || !picks.every(id => typeof id === 'string' && CHARACTERS[id])) return;
     if (!Number.isInteger(matchId) || matchId <= onlineMatchId || epoch !== onlineLobbyEpoch) return;
-    const fromLobby = onlineState === 'select' && onlineMyCharacter && onlineOpponentCharacter;
+    onlineRoomSize = Math.max(2, Math.min(4, picks.length));
+    const fromLobby = onlineState === 'select' && onlineSeatConfirmed && Boolean(onlineCharacters[onlinePlayerNumber]);
     const fromResult = onlineState === 'playing' && game.phase === 'finished';
     // Accept new match even if we haven't reached finished yet (fast rematch race)
     const fromPlaying = onlineState === 'playing' && matchId > onlineMatchId + 1;
     if (!fromLobby && !fromResult && !fromPlaying) return;
     // Accept gameStart even if we cancelled ready (race condition): host already started
-    if (fromLobby && !onlineMyReady) {
+    if (fromLobby && !onlineReady[onlinePlayerNumber]) {
       // Auto-ready to sync with host's state
-      onlineMyReady = true;
+      onlineReady[onlinePlayerNumber] = true;
     }
     onlineMatchId = matchId;
     onlineState = 'playing';
@@ -2839,22 +2928,25 @@
     game.manualPicks = [...picks];
     game.sofaCount = Math.max(1, Math.min(3, Number(sofaCount) || 1));
     game.matchSofas = game.sofaCount;
-    game.scores = [0, 0];
-    game.combo = [0, 0];
-    game.maxCombo = [0, 0];
+    const matchPlayers = picks.length;
+    players = Array.from({ length: matchPlayers }, (_, i2) => players[i2] || makePlayer(i2));
+    game.playerCount = matchPlayers;
+    game.scores = Array(matchPlayers).fill(0);
+    game.combo = Array(matchPlayers).fill(0);
+    game.maxCombo = Array(matchPlayers).fill(0);
     game.round = 0;
     game.ruleHistory = [];
-    game.mashCounts = [0, 0];
+    game.mashCounts = Array(matchPlayers).fill(0);
     game.morphT = 0; game.morphPhase = -1;
     game.chaosTimer = 0; game.chaosNext = 0;
-    game.mashWins = [0, 0];
+    game.mashWins = Array(matchPlayers).fill(0);
     game.morphT = 0; game.morphPhase = -1;
     game.rule = null;
     game.rulePhase = 'idle';
     game.ruleTarget = null;
     game.ruleMove = null;
     game.seats = [];
-    game.capture = [0, 0];
+    game.capture = Array(matchPlayers).fill(0);
     game.standoff = false;
     game.standoffTime = 0;
     game.standoffShown = false;
@@ -2871,7 +2963,7 @@
     onlineLastSnapshotAt = 0;
     guestHitStop = 0;
     onlineHostReplaying = false;
-    remoteInterpolation = freshInterpolation();
+    remoteInterpolations = Array.from({ length: matchPlayers }, () => freshInterpolation());
     clearHighlight();
     resetPlayers();
     hideAllScreens();
@@ -2894,7 +2986,6 @@
       if (sendOnlineInput(onlinePendingSkill)) onlinePendingSkill = false;
     }, 33);
   }
-
   function buildOnlineSnapshot() {
     return {
       matchId: onlineMatchId,
@@ -2931,19 +3022,19 @@
       echo: performance.now() - onlineEchoAt < 600 ? onlineEchoTimestamp : null,
       replaying: Boolean(game.replay),
       impacts: onlineImpactQueue.splice(0, onlineImpactQueue.length),
-      result: game.phase === 'finished' ? { winner: game.scores[0] > game.scores[1] ? 0 : 1 } : null
+      result: game.phase === 'finished' ? { winner: game.scores.indexOf(Math.max(...game.scores)) } : null
     };
   }
-
   function applyOnlineSnapshot(state) {
-    if (!state || onlineState !== 'playing' || state.matchId !== onlineMatchId) return;
-    if (!['countdown', 'playing', 'roundEnd', 'finished'].includes(state.phase)) return;
-    if (!Number.isInteger(state.round) || !Number.isFinite(state.time)) return;
-    if (!Array.isArray(state.scores) || state.scores.length !== 2 || !state.scores.every(Number.isFinite)) return;
-    if (!Array.isArray(state.players) || state.players.length !== 2 || !state.players.every(p => p && CHARACTERS[p.characterId] && Number.isFinite(p.x) && Number.isFinite(p.y))) return;
-    if (state.rule && !RULES[state.rule]) return;
-    if (state.seats && (!Array.isArray(state.seats) || state.seats.length > 3 || !state.seats.every(seat => seat && Number.isFinite(seat.x) && Number.isFinite(seat.y) && Array.isArray(seat.capture) && seat.capture.length === 2))) return;
-    if (state.result && ![0, 1].includes(state.result.winner)) return;
+    const rejectSnap = why => { if (window.__snapRejects) window.__snapRejects.push(why); };
+    if (!state || onlineState !== 'playing' || state.matchId !== onlineMatchId) return rejectSnap('R1:if (!state || onlineState !== playing || state.matchId !==');
+    if (!['countdown', 'playing', 'roundEnd', 'finished'].includes(state.phase)) return rejectSnap('R2:if (![countdown, playing, roundEnd, finished].includ');
+    if (!Number.isInteger(state.round) || !Number.isFinite(state.time)) return rejectSnap('R3:if (!Number.isInteger(state.round) || !Number.isFinite(state');
+    if (!Array.isArray(state.scores) || state.scores.length !== state.players.length || !state.scores.every(Number.isFinite)) return rejectSnap('R4:if (!Array.isArray(state.scores) || state.scores.length !== ');
+    if (!Array.isArray(state.players) || state.players.length < 2 || state.players.length > 4) return rejectSnap('R5:if (!Array.isArray(state.players) || state.players.length < ');
+    if (state.rule && !RULES[state.rule]) return rejectSnap('R6:if (state.rule && !RULES[state.rule]) return;');
+    if (state.seats && (!Array.isArray(state.seats) || state.seats.length > 3 || !state.seats.every(seat => seat && Number.isFinite(seat.x) && Number.isFinite(seat.y) && Array.isArray(seat.capture) && seat.capture.length === state.players.length))) return rejectSnap('R7:if (state.seats && (!Array.isArray(state.seats) || state.sea');
+    if (state.result && (!Number.isInteger(state.result.winner) || state.result.winner < 0 || state.result.winner >= state.players.length)) return rejectSnap('R8:if (state.result && (!Number.isInteger(state.result.winner) ');
     if (state.sofaCount) {
       game.matchSofas = Math.max(1, Math.min(3, Number(state.sofaCount) || 1));
       document.body.classList.toggle('multi-sofa', game.matchSofas > 1);
@@ -2952,7 +3043,7 @@
     game.round = state.round;
     game.phase = state.phase;
     game.scores = [...state.scores];
-    if (Array.isArray(state.mash) && state.mash.length === 2) game.mashCounts = [...state.mash];
+    if (Array.isArray(state.mash) && state.mash.length === state.players.length) game.mashCounts = [...state.mash];
     if (Array.isArray(state.impacts)) {
       for (const imp of state.impacts) {
         if (!imp || !Number.isFinite(imp.x) || !Number.isFinite(imp.y)) continue;
@@ -2987,16 +3078,22 @@
       game.standoffTime = 0;
       onlinePendingSkill = false;
       resetPlayers();
-      remoteInterpolation = freshInterpolation();
+      remoteInterpolations = Array.from({ length: state.players.length }, () => freshInterpolation());
     }
     onlineHostReplaying = Boolean(state.replaying);
     if (Array.isArray(state.players)) {
-      // Guest predicts its own movement between snapshots; the other player is interpolated.
-      const remote = state.players[0];
-      const mine = state.players[1];
-      if (mine) applySnapshotPlayer(players[1], mine, true, roundChanged);
-      if (remote) {
-        const p = players[0];
+      // Guest predicts its own movement between snapshots; every other player is interpolated.
+      const mineIdx = onlinePlayerNumber;
+      const mine = state.players[mineIdx];
+      if (mine && players[mineIdx]) applySnapshotPlayer(players[mineIdx], mine, true, roundChanged);
+      const now = performance.now();
+      for (let idx = 0; idx < state.players.length; idx++) {
+        if (idx === mineIdx) continue;
+        const remote = state.players[idx];
+        const p = players[idx];
+        if (!remote || !p) continue;
+        if (!remoteInterpolations[idx]) remoteInterpolations[idx] = freshInterpolation();
+        const interp = remoteInterpolations[idx];
         p.characterId = remote.characterId;
         p.stunned = remote.stunned;
         p.shieldLeft = remote.shieldLeft;
@@ -3008,28 +3105,17 @@
         p.facingY = remote.facingY;
         p.emotion = remote.emotion;
         p.trap = remote.trap ? { ...remote.trap } : null;
-        const now = performance.now();
-        if (remoteInterpolation.lastUpdateTime === 0 || roundChanged) {
-          remoteInterpolation.prevX = remote.x;
-          remoteInterpolation.prevY = remote.y;
-          remoteInterpolation.prevVX = remote.vx;
-          remoteInterpolation.prevVY = remote.vy;
-          p.x = remote.x;
-          p.y = remote.y;
+        if (interp.lastUpdateTime === 0 || roundChanged) {
+          interp.prevX = remote.x; interp.prevY = remote.y; interp.prevVX = remote.vx; interp.prevVY = remote.vy;
+          p.x = remote.x; p.y = remote.y;
         } else {
-          const measuredInterval = (now - remoteInterpolation.lastUpdateTime) / 1000;
-          remoteInterpolation.interpDuration = Math.max(.035, Math.min(.1, measuredInterval * 1.1));
-          remoteInterpolation.prevX = p.x;
-          remoteInterpolation.prevY = p.y;
-          remoteInterpolation.prevVX = p.vx;
-          remoteInterpolation.prevVY = p.vy;
+          const measuredInterval = (now - interp.lastUpdateTime) / 1000;
+          interp.interpDuration = Math.max(.035, Math.min(.1, measuredInterval * 1.1));
+          interp.prevX = p.x; interp.prevY = p.y; interp.prevVX = p.vx; interp.prevVY = p.vy;
         }
-        remoteInterpolation.targetX = remote.x;
-        remoteInterpolation.targetY = remote.y;
-        remoteInterpolation.targetVX = remote.vx;
-        remoteInterpolation.targetVY = remote.vy;
-        remoteInterpolation.interpTime = 0;
-        remoteInterpolation.lastUpdateTime = now;
+        interp.targetX = remote.x; interp.targetY = remote.y; interp.targetVX = remote.vx; interp.targetVY = remote.vy;
+        interp.interpTime = 0;
+        interp.lastUpdateTime = now;
       }
     }
     game.time = state.time;
@@ -3041,7 +3127,6 @@
     if (state.phase === 'finished' && state.result) presentOnlineResult(state.result.winner);
     updateHud();
   }
-
   function applySnapshotPlayer(p, snap, isLocal, snapPosition) {
     const locallyStunned = p.stunned > 0;
     p.characterId = snap.characterId;
@@ -3075,7 +3160,6 @@
       p.facingY = snap.facingY;
     }
   }
-
   function updateOnlineClient(dt) {
     if (guestHitStop > 0) {
       // Classic impact freeze: hold the frame briefly so the hit lands.
@@ -3092,7 +3176,7 @@
     for (const p of game.particles) { p.life -= dt; p.vy += 210 * dt; p.x += p.vx * dt; p.y += p.vy * dt; }
     if (game.phase === 'playing') game.time = Math.max(0, game.time - dt);
     updateRemoteInterpolation(dt);
-    if (game.phase === 'playing') updatePlayer(players[1], dt, localMoveVector());
+    if (game.phase === 'playing' && players[onlinePlayerNumber]) updatePlayer(players[onlinePlayerNumber], dt, localMoveVector());
     if (game.phase === 'playing') {
       const lagEl = $('lag-indicator');
       if (lagEl) {
@@ -3103,22 +3187,24 @@
     }
     updateHud();
   }
-
   function updateRemoteInterpolation(dt) {
-    if (onlinePlayerNumber !== 1 || onlineState !== 'playing') return;
-    const p = players[0];
-    if (!p || remoteInterpolation.lastUpdateTime === 0) return;
-    remoteInterpolation.interpTime += dt;
-    const t = Math.min(1, remoteInterpolation.interpTime / remoteInterpolation.interpDuration);
-    const eased = t * t * (3 - 2 * t);
-    p.x = remoteInterpolation.prevX + (remoteInterpolation.targetX - remoteInterpolation.prevX) * eased;
-    p.y = remoteInterpolation.prevY + (remoteInterpolation.targetY - remoteInterpolation.prevY) * eased;
-    p.vx = remoteInterpolation.prevVX + (remoteInterpolation.targetVX - remoteInterpolation.prevVX) * eased;
-    p.vy = remoteInterpolation.prevVY + (remoteInterpolation.targetVY - remoteInterpolation.prevVY) * eased;
+    if (game.mode !== 'online' || onlinePlayerNumber === 0 || onlinePlayerNumber === null || onlineState !== 'playing') return;
+    for (let idx = 0; idx < players.length; idx++) {
+      if (idx === onlinePlayerNumber) continue;
+      const p = players[idx];
+      const interp = remoteInterpolations[idx];
+      if (!p || !interp || interp.lastUpdateTime === 0) continue;
+      interp.interpTime += dt;
+      const t = Math.min(1, interp.interpTime / interp.interpDuration);
+      const eased = t * t * (3 - 2 * t);
+      p.x = interp.prevX + (interp.targetX - interp.prevX) * eased;
+      p.y = interp.prevY + (interp.targetY - interp.prevY) * eased;
+      p.vx = interp.prevVX + (interp.targetVX - interp.prevVX) * eased;
+      p.vy = interp.prevVY + (interp.targetVY - interp.prevVY) * eased;
+    }
   }
-
   function presentOnlineResult(winner) {
-    if (![0, 1].includes(winner) || $('result-screen').classList.contains('visible')) return;
+    if (!Number.isInteger(winner) || winner < 0 || winner >= players.length || $('result-screen').classList.contains('visible')) return;
     stopOnlineLoop();
     onlinePendingSkill = false;
     keys.clear();
@@ -3137,18 +3223,19 @@
     $('result-icon').textContent = iWon ? '🏆' : '🛋️';
     $('result-screen').classList.add('visible');
   }
-
   function requestOnlineRematch() {
     if (onlineState !== 'playing' || game.phase !== 'finished') return;
     if (onlinePlayerNumber === 0) {
-      startOnlineMatch();
+      onlineRematchVotes.add(0);
+      const connectedSeats = [0, ...network.conns.filter(entry => entry.conn.open).map(entry => entry.playerNumber)];
+      if (connectedSeats.every(seat => onlineRematchVotes.has(seat))) { startOnlineMatch(); return; }
+      $('result-subtitle').textContent = `等待其他玩家点击“再来一局”（${onlineRematchVotes.size}/${players.length}）…`;
     } else if (onlineConnected()) {
-      network.send('rematch', { matchId: onlineMatchId });
+      network.send('rematch', { matchId: onlineMatchId, seat: onlinePlayerNumber });
       $('again-btn').disabled = true;
       $('result-subtitle').textContent = '已请求再来一局，等待房主开始…';
     }
   }
-
   function backToOnlineSelect(notify) {
     if (!['playing', 'select'].includes(onlineState)) return;
     const nextEpoch = onlineLobbyEpoch + 1;
@@ -3156,55 +3243,94 @@
     clearHighlight();
     enterOnlineSelect(nextEpoch);
   }
-
   function handleOnlineMessage(data) {
+    if (window.__msgLog && window.__msgLog.length < 300) window.__msgLog.push((data && data.type || '?') + (data && Number.isInteger(data.seat) ? ':' + data.seat : ''));
     if (!data || !data.type) return;
     switch (data.type) {
       case 'hello':
-        // A (re)joining guest asks for the host's authoritative lobby epoch.
+        // A (re)joining guest asks for the host's authoritative lobby state.
         if (onlinePlayerNumber === 0 && onlineState === 'select' && onlineConnected()) {
-          network.send('lobby', { epoch: onlineLobbyEpoch });
+          broadcastOnlineLobby();
         }
         break;
       case 'lobby':
-        if (onlinePlayerNumber === 1 && onlineState === 'select' && Number.isInteger(data.epoch)
-            && data.epoch >= onlineLobbyEpoch) {
+        if (onlinePlayerNumber !== 0 && onlineState === 'select' && Number.isInteger(data.epoch)
+            && data.epoch >= onlineLobbyEpoch && Array.isArray(data.characters) && Array.isArray(data.ready)) {
           onlineLobbyEpoch = data.epoch;
+          onlineRoomSize = Math.max(2, Math.min(4, Number(data.size) || 2));
+          onlineCharacters = data.characters.slice(0, onlineRoomSize);
+          while (onlineCharacters.length < onlineRoomSize) onlineCharacters.push(null);
+          onlineReady = data.ready.slice(0, onlineRoomSize).map(Boolean);
+          onlineSeatConfirmed = true;
+          while (onlineReady.length < onlineRoomSize) onlineReady.push(false);
+          if (data.v && data.v !== GAME_VERSION) $('online-error').textContent = '双方游戏版本不一致，请双方都刷新页面后再联机';
           updateOnlineLobby();
         }
         break;
+      case 'welcome':
+        if (onlinePlayerNumber !== 0 && Number.isInteger(data.playerNumber)) {
+          onlinePlayerNumber = data.playerNumber;
+          onlineRoomSize = Math.max(2, Math.min(4, Number(data.size) || 2));
+          onlineSeatConfirmed = true;
+          if (Number.isInteger(data.epoch)) onlineLobbyEpoch = Math.max(onlineLobbyEpoch, data.epoch);
+          if (data.v && data.v !== GAME_VERSION) $('online-error').textContent = '双方游戏版本不一致，请双方都刷新页面（下拉刷新或强刷）后再联机';
+          updateOnlineLobby();
+        }
+        break;
+      case 'roomFull':
+        if (onlinePlayerNumber !== 0) leaveOnlineRoom('房间已满，稍后再试');
+        break;
       case 'characterSelect':
         if (onlineState !== 'select' || data.epoch !== onlineLobbyEpoch || !CHARACTERS[data.character]) return;
-        if (onlineOpponentCharacter !== data.character) onlineOpponentReady = false;
-        onlineOpponentCharacter = data.character;
+        if (onlinePlayerNumber !== 0 || !Number.isInteger(data.seat) || data.seat < 1 || data.seat >= onlineRoomSize) return;
+        if (onlineCharacters[data.seat] !== data.character) onlineReady[data.seat] = false;
+        onlineCharacters[data.seat] = data.character;
+        broadcastOnlineLobby();
         updateOnlineLobby();
         maybeStartOnlineMatch();
         break;
       case 'playerReady':
         if (onlineState !== 'select' || data.epoch !== onlineLobbyEpoch || typeof data.ready !== 'boolean') return;
-        if (!onlineOpponentCharacter || data.character !== onlineOpponentCharacter) return;
-        onlineOpponentReady = data.ready;
+        if (onlinePlayerNumber !== 0 || !Number.isInteger(data.seat) || data.seat < 1 || data.seat >= onlineRoomSize) return;
+        if (data.character && CHARACTERS[data.character]) onlineCharacters[data.seat] = data.character;
+        onlineReady[data.seat] = data.ready;
+        broadcastOnlineLobby();
         updateOnlineLobby();
         maybeStartOnlineMatch();
         break;
+        if (onlinePlayerNumber === 0 && onlineState === 'select' && onlineConnected()) {
+          network.send('lobby', { epoch: onlineLobbyEpoch });
+        }
+        break;
+      case 'lobby':
+if (onlinePlayerNumber !== 0 && onlinePlayerNumber !== null && onlineState === 'select' && Number.isInteger(data.epoch)
+            && data.epoch >= onlineLobbyEpoch) {
+          onlineLobbyEpoch = data.epoch;
+          updateOnlineLobby();
+        }
+        break;
       case 'gameStart':
-        if (onlinePlayerNumber === 1) beginOnlineClientMatch(data.picks, data.sofaCount, data.matchId, data.epoch);
+        if (onlinePlayerNumber !== 0 && onlinePlayerNumber !== null) beginOnlineClientMatch(data.picks, data.sofaCount, data.matchId, data.epoch);
         break;
       case 'input':
         if (onlinePlayerNumber === 0 && onlineState === 'playing' && data.matchId === onlineMatchId && ['playing', 'countdown'].includes(game.phase)) {
+          const seat = Number(data.seat);
+          if (!Number.isInteger(seat) || seat < 1 || seat >= players.length) break;
           let x = Number(data.x), y = Number(data.y);
           if (!Number.isFinite(x)) x = 0;
           if (!Number.isFinite(y)) y = 0;
           const length = Math.hypot(x, y);
           if (length > 1) { x /= length; y /= length; }
-          onlineOpponentInput = { x, y, skill: onlineOpponentInput.skill || Boolean(data.skill) };
-          if (data.skill) registerMash(players[1]);
+          const input = onlineGuestInputs[seat - 1] || (onlineGuestInputs[seat - 1] = { x: 0, y: 0, skill: false });
+          input.x = x; input.y = y; input.skill = input.skill || Boolean(data.skill);
+          if (data.skill) registerMash(players[seat]);
           if (Number.isFinite(data.timestamp)) { onlineEchoTimestamp = data.timestamp; onlineEchoAt = performance.now(); }
-          onlineLastInputAt = performance.now();
+          onlineLastInputAts[seat - 1] = performance.now();
         }
         break;
+        break;
       case 'gameState':
-        if (onlinePlayerNumber === 1 && onlineState === 'playing') {
+if (onlinePlayerNumber !== 0 && onlinePlayerNumber !== null && onlineState === 'playing') {
           onlineLastSnapshotAt = performance.now();
           // Prefer the echoed input timestamp: both sides use the guest clock, so
           // this measures true input->state latency without cross-device skew.
@@ -3214,36 +3340,44 @@
         }
         break;
       case 'rematch':
-        if (onlinePlayerNumber === 0 && onlineState === 'playing' && game.phase === 'finished' && data.matchId === onlineMatchId) startOnlineMatch();
+        if (onlinePlayerNumber === 0 && onlineState === 'playing' && game.phase === 'finished' && data.matchId === onlineMatchId) {
+          const voter = Number(data.seat);
+          if (Number.isInteger(voter) && voter >= 1 && voter < players.length) onlineRematchVotes.add(voter);
+          const connectedSeats = [0, ...network.conns.filter(entry => entry.conn.open).map(entry => entry.playerNumber)];
+          if (connectedSeats.every(seat => seat === 0 || onlineRematchVotes.has(seat))) startOnlineMatch();
+        }
+        break;
         break;
       case 'backToSelect': {
         if (!Number.isInteger(data.epoch) || data.epoch < onlineLobbyEpoch || data.epoch > onlineLobbyEpoch + 1) return;
         if (data.epoch === onlineLobbyEpoch && onlineState === 'select') return;
         enterOnlineSelect(data.epoch);
         break;
+        if (onlinePlayerNumber === 0) broadcastOnlineLobby();
       }
       case 'leave':
-        handlePeerLeave();
+        handlePeerLeave(data.seat);
         break;
     }
   }
-
-  function handlePeerLeave() {
+  function handlePeerLeave(seat) {
     if (!network) return;
-    // Unexpected drops get one reconnect path; intentional leaves tear the
-    // session down before this fires, so they never reach here.
-    if (onlinePlayerNumber === 0 && (onlineState === 'select' || onlineState === 'playing')) {
+    if (onlinePlayerNumber !== 0 && (onlineState === 'select' || onlineState === 'playing')) {
+      startGuestRejoin();
+      return;
+    }
+    if (onlinePlayerNumber === 0 && onlineState === 'select') {
       startHostReconnectWait();
       return;
     }
-    if (onlinePlayerNumber === 1 && (onlineState === 'select' || onlineState === 'playing')) {
-      startGuestRejoin();
+    if (onlinePlayerNumber === 0 && onlineState === 'playing') {
+      // Another seat dropped mid-match: standard 20s rejoin window, then the room closes (v1).
+      startHostReconnectWait();
       return;
     }
     const message = onlineState === 'playing' ? '对手已离开，本局结束' : '对手已断开连接';
     leaveOnlineRoom(message);
   }
-
   function startHostReconnectWait() {
     stopOnlineLoop();
     // Keep the room open on a fresh select screen; if the guest refreshes, it
@@ -3257,7 +3391,6 @@
       }
     }, 20000);
   }
-
   async function startGuestRejoin() {
     const code = onlineRoomCode;
     if (!code) { leaveOnlineRoom('连接已断开'); return; }
@@ -3267,9 +3400,13 @@
       if (onlineState === 'menu' || operation !== onlineOperation) return; // user backed out
       try {
         await joinRoomByCode(code);
-        if (operation !== onlineOperation || onlineState === 'menu') {
+      if (operation !== onlineOperation || onlineState === 'menu') {
+        // A newer operation (user create/join) already owns `network` — and its
+        // prepareOnlineLobby tore this attempt's session down. Do not clobber it.
+        if (operation === onlineOperation) {
           // The user left while this attempt was in flight and the join still
           // succeeded: drop the room immediately or they would be yanked back
+        }
           // into the lobby against their will.
           const stale = network; network = null;
           if (stale) { stale.onData = null; stale.onPlayerJoin = null; stale.onPlayerLeave = null; stale.leaveRoom().catch(() => {}); }
@@ -3281,14 +3418,12 @@
     }
     if (operation === onlineOperation) leaveOnlineRoom('与对手的连接已断开，请重新加入房间');
   }
-
   function stopOnlineLoop() {
     if (onlineGameInterval) {
       clearInterval(onlineGameInterval);
       onlineGameInterval = null;
     }
   }
-
   async function leaveOnlineRoom(message) {
     ++onlineOperation;
     if (onlineReconnectTimer) { clearTimeout(onlineReconnectTimer); onlineReconnectTimer = null; }
@@ -3303,15 +3438,15 @@
     onlinePlayerNumber = null;
     onlineRoomCode = null;
     try { sessionStorage.removeItem('sofa-host-room'); } catch (_) {}
-    onlineMyCharacter = null;
-    onlineOpponentCharacter = null;
-    onlineMyReady = false;
-    onlineOpponentReady = false;
+    onlineCharacters = Array(onlineRoomSize).fill(null);
+    onlineReady = Array(onlineRoomSize).fill(false);
+    onlineGuestInputs = [];
+    onlineSeatConfirmed = false;
     onlineLobbyEpoch = 0;
     onlineMatchId = 0;
-    onlineOpponentInput = { x: 0, y: 0, skill: false };
+    onlineGuestInputs = Array(Math.max(0, players.length - 1)).fill(null).map(() => ({ x: 0, y: 0, skill: false }));    onlineRematchVotes = new Set();
     onlinePendingSkill = false;
-    remoteInterpolation = freshInterpolation();
+    remoteInterpolations = [];
     networkLag = 0;
     onlineEchoTimestamp = 0;
     onlineEchoAt = -Infinity;
@@ -3340,7 +3475,6 @@
       try { await oldNetwork.leaveRoom(); } catch (_) {}
     }
   }
-
   // Difficulty and sofa-count selectors
   document.querySelectorAll('.difficulty-btn[data-difficulty]').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -3355,13 +3489,24 @@
       document.querySelectorAll('.sofa-btn').forEach(b => b.classList.toggle('active', b === btn));
     });
   });
-
+  document.querySelectorAll('.count-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      game.localPlayerCount = Math.max(2, Math.min(4, Number(btn.dataset.count) || 2));
+      document.querySelectorAll('.count-btn').forEach(b => b.classList.toggle('active', b === btn));
+    });
+  });
+  document.querySelectorAll('.size-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      onlineRoomSize = Math.max(2, Math.min(4, Number(btn.dataset.size) || 2));
+      document.querySelectorAll('.size-btn').forEach(b => b.classList.toggle('active', b === btn));
+    });
+  });
   // Online button event listeners
   $('create-room-btn').addEventListener('click', () => createRoom());
   $('join-room-btn').addEventListener('click', joinRoom);
   $('online-ready-btn').addEventListener('click', toggleOnlineReady);
   $('online-leave-btn').addEventListener('click', () => {
-    if (onlineConnected()) network.send('leave', {});
+    if (onlineConnected()) network.send('leave', { seat: onlinePlayerNumber });
     leaveOnlineRoom('你已离开房间');
   });
   $('room-code-input').addEventListener('keypress', e => {
@@ -3405,11 +3550,9 @@
     if (onlineState === 'menu') returnToMenu('cpu');
     else leaveOnlineRoom();
   });
-
   syncMode();
   resetPlayers();
   updateHud();
-
   // Host refresh recovery: reopening the page reopens the same room, so a
   // refresh no longer kills the match for both players. The guest rejoin
   // loop (20s grace on their side) will find this room again.
@@ -3442,10 +3585,20 @@
           state: onlineState, playerNumber: onlinePlayerNumber, roomCode: onlineRoomCode,
           mode: game.mode, phase: game.phase, round: game.round, scores: [...game.scores],
           picks: [...game.picks], rule: game.rule && game.rule.id,
-          myCharacter: onlineMyCharacter, opponentCharacter: onlineOpponentCharacter,
-          myReady: onlineMyReady, opponentReady: onlineOpponentReady,
+          characters: [...onlineCharacters],
+          ready: [...onlineReady],
+          roomSize: onlineRoomSize,
+          connectedSeats: onlineConnectedSeats(),
+          myCharacter: onlineCharacters[onlinePlayerNumber] ?? null,
+          opponentCharacter: onlineCharacters[onlinePlayerNumber === 0 ? 1 : 0] ?? null,
+          myReady: Boolean(onlineReady[onlinePlayerNumber]),
+          opponentReady: Boolean(onlineReady[onlinePlayerNumber === 0 ? 1 : 0]),
           epoch: onlineLobbyEpoch, matchId: onlineMatchId, pendingSkill: onlinePendingSkill,
-          bounds: playArea(), interpolationDuration: remoteInterpolation.interpDuration,
+          bounds: playArea(), interpolationDuration: remoteInterpolations[0] ? remoteInterpolations[0].interpDuration : 0,
+          teleport(i, x, y) { const p = players[i]; if (p && Number.isFinite(x) && Number.isFinite(y)) { p.x = x; p.y = y; p.vx = 0; p.vy = 0; p.stunned = 0; } },
+          captures: [...game.capture],
+          standoff: game.standoff,
+          seatInside: game.seats.map(seat => players.map((p, pi) => dist(p, seat) < CAPTURE_RADIUS * (seat.scale || 1) && p.stunned <= 0 ? pi : -1).filter(v => v >= 0)),
           seats: game.seats.map(seat => ({ x: seat.x, y: seat.y, capture: [...seat.capture], scale: seat.scale || 1 })),
           morphT: game.morphT || 0, morphPhase: game.morphPhase, rulePhase: game.rulePhase,
           musicActive: Boolean(game.music),
@@ -3457,7 +3610,7 @@
       receiveOnline(data) { handleOnlineMessage(data); },
       finishOnline(winner = 0) {
         if (game.mode !== 'online' || onlinePlayerNumber !== 0) throw new Error('Only the online host can finish a bench match');
-        game.scores = winner === 0 ? [WIN_SCORE, 0] : [0, WIN_SCORE];
+        game.scores = game.scores.map((_, index) => index === winner ? WIN_SCORE : 0);
         finishMatch();
       },
       run(first, second, maxTicks = 12000) {
@@ -3491,7 +3644,6 @@
           game.paused = false;
           resetPlayers();
         };
-
         prepare('blink', 'guard');
         players[0].x = 200;
         players[0].y = 300;
@@ -3503,7 +3655,6 @@
         game.time = 4;
         game.lastImpact = { side: 0, kind: 'blink', time: 5 };
         results.highlightTitle = { ok: highlightTitle(0, 'capture') === '这一闪，刚刚好！', title: highlightTitle(0, 'capture') };
-
         prepare('magnet', 'dash');
         players[0].x = 400;
         players[0].y = 300;
@@ -3513,7 +3664,6 @@
         const pullVelocity = players[1].vx;
         updatePlayer(players[1], .2, { x: 0, y: 0 });
         results.pull = { ok: pullVelocity < 0 && players[1].vx > 0 && players[1].stunned > 0, pullVelocity, reboundVelocity: players[1].vx, stun: players[1].stunned };
-
         prepare('trap', 'dash');
         players[0].x = 400;
         players[0].y = 300;
@@ -3525,7 +3675,6 @@
         updatePlayer(players[0], players[0].trap.arm + .01, { x: 0, y: 0 });
         updateTraps();
         results.trap = { ok: waitedForArm && players[1].stunned > 0 && !players[0].trap, stun: players[1].stunned };
-
         prepare('trap', 'guard');
         useSkill(players[0]);
         useSkill(players[1]);
@@ -3534,6 +3683,55 @@
         updatePlayer(players[0], players[0].trap.arm + .01, { x: 0, y: 0 });
         updateTraps();
         results.trapShield = { ok: players[1].stunned === 0 && players[1].shieldHit && !players[0].trap, stun: players[1].stunned };
+        prepare('vampire', 'dash');
+        players[0].x = 400;
+        players[0].y = 300;
+        players[1].x = 450;
+        players[1].y = 300;
+        game.seats = [{ x: 420, y: 300, capture: [0, 1], scale: 1 }];
+        useSkill(players[0]);
+        results.vampire = { ok: players[1].stunned > 0 && players[0].vampireLeft > 0 && players[0].shieldLeft > 0 && game.seats[0].capture[1] < 1, stun: players[1].stunned, drained: game.seats[0].capture[1] };
+        prepare('vampire', 'dash');
+        players[0].x = 300;
+        players[0].y = 300;
+        players[1].x = 540;
+        players[1].y = 300;
+        useSkill(players[0]);
+        results.vampireRange = { ok: players[1].stunned === 0 && players[0].vampireLeft > 0 };
+        prepare('dash', 'guard');
+        game.time = 4;
+        const newTitles = Object.fromEntries(['vampire', 'knight', 'ninja', 'mage'].map(kind => {
+          game.lastImpact = { side: 0, kind, time: 5 };
+          return [kind, highlightTitle(0, 'capture')];
+        }));
+        results.newHighlightTitles = {
+          ok: Object.values(newTitles).every(title => !title.includes('抢到了关键位置')),
+          ...newTitles
+        };
+        prepare('knight', 'dash');
+        players[0].x = 400;
+        players[0].y = 300;
+        players[1].x = 445;
+        players[1].y = 300;
+        useSkill(players[0]);
+        updatePlayer(players[0], .05, { x: 0, y: 0 });
+        results.knight = { ok: players[1].stunned > 0 && players[1].vx !== 0, stun: players[1].stunned };
+        prepare('ninja', 'dash');
+        players[0].x = 400;
+        players[0].y = 300;
+        useSkill(players[0]);
+        results.ninja = { ok: players[0].ninjaLeft > 0 && Boolean(players[0].ninjaClone) && players[0].speedBoost > 1, boost: players[0].speedBoost };
+        updatePlayer(players[0], .05, { x: 0, y: 0 });
+        results.ninjaTick = { ok: players[0].ninjaClone && players[0].ninjaClone.life < 2 && players[0].ninjaLeft < 2 };
+        prepare('mage', 'dash');
+        players[0].x = 300;
+        players[0].y = 300;
+        players[1].x = 460;
+        players[1].y = 300;
+        useSkill(players[0]);
+        const hadProjectile = Boolean(players[0].mageProjectile);
+        for (let step = 0; step < 40 && players[0].mageProjectile; step++) updatePlayer(players[0], .016, { x: 0, y: 0 });
+        results.mage = { ok: hadProjectile && players[1].stunned > 0 && !players[0].mageProjectile, stun: players[1].stunned };
         return results;
       },
       checkSeats() {
@@ -3596,4 +3794,4 @@
   } else {
     requestAnimationFrame(frame);
   }
-})();
+})();
