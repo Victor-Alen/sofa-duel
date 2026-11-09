@@ -1212,6 +1212,23 @@ if (game.mode === 'online' && onlinePlayerNumber !== 0 && onlinePlayerNumber !==
         }
         targetSeat = best;
       }
+      const emptySeats = game.seats.filter(seat => !players.some(q => q !== p && dist(q, seat) < CAPTURE_RADIUS));
+      if (emptySeats.length && !emptySeats.includes(targetSeat) && Math.random() < .5) {
+        // Commit to an empty sofa half the time so a herd of AIs splits up
+        // instead of oscillating together and freezing every seat.
+        targetSeat = emptySeats[Math.floor(Math.random() * emptySeats.length)];
+      }
+      if (game.seats.length > 1 && players.length > 2 && targetSeat) {
+        const matesOnTarget = players.filter(q => q !== p && q.i !== 0 && dist(q, targetSeat) < CAPTURE_RADIUS).length;
+        if (matesOnTarget >= 1) {
+          let bestSeat = targetSeat, bestCount = Infinity;
+          for (const seat of game.seats) {
+            const count = players.filter(q => q !== p && dist(q, seat) < CAPTURE_RADIUS).length;
+            if (count < bestCount) { bestCount = count; bestSeat = seat; }
+          }
+          if (bestSeat && bestSeat !== targetSeat) targetSeat = bestSeat;
+        }
+      }
       const seatDistance = targetSeat ? dist(p, targetSeat) : 999;
       const nearSeat = Boolean(targetSeat) && seatDistance < 86;
       const contested = Boolean(targetSeat) && dist(other, targetSeat) < CAPTURE_RADIUS;
@@ -1648,7 +1665,14 @@ if (game.mode === 'online' && onlinePlayerNumber !== 0 && onlinePlayerNumber !==
           for (let j = 0; j < players.length; j++) seat.capture[j] = Math.max(0, seat.capture[j] - dt * .13);
           continue;
         }
-        for (const i of insideIdx) seat.capture[i] += dt;
+        if (insideIdx.length > 1) {
+          // Contested sofa: while rivals share it, nobody's fill advances —
+          // stand your ground to deny, or knock them off to resume capturing.
+          game.standoff = true;
+          for (const j of insideIdx) seat.capture[j] = Math.max(0, seat.capture[j] - dt * 1.2);
+          continue;
+        }
+        seat.capture[insideIdx[0]] += dt;
         for (let j = 0; j < players.length; j++) if (!insideIdx.includes(j)) seat.capture[j] = Math.max(0, seat.capture[j] - dt * .13);
         const filled = insideIdx.filter(i => seat.capture[i] >= CAPTURE_SECONDS);
         if (filled.length) { scorePoint(filled[Math.floor(Math.random() * filled.length)], 'capture', seat); break; }
@@ -1672,7 +1696,7 @@ if (game.mode === 'online' && onlinePlayerNumber !== 0 && onlinePlayerNumber !==
       game.standoffShown = true;
       showBanner('沙发对峙 · 先把对手逼起身', 1.1);
     }
-    game.capture = game.seats.reduce((best, seat) => [Math.max(best[0], seat.capture[0]), Math.max(best[1], seat.capture[1])], [0, 0]);
+    game.capture = players.map((_, j) => Math.max(...game.seats.map(seat => seat.capture[j] || 0)));
     // Capture heartbeat: as someone closes in on a point, a soft tick speeds up
     // the tension (throttled; audio only, zero gameplay effect).
     const closingIn = Math.max(...game.capture);
@@ -2453,7 +2477,7 @@ if (game.mode === 'online' && onlinePlayerNumber !== 0 && onlinePlayerNumber !==
   let onlineState = 'menu'; // menu | waiting | select | playing
   let onlineRoomCode = null;
   let onlinePlayerNumber = null; // 0 = host, 1 = guest
-let GAME_VERSION = '15.8.3';      // handshake: mismatched versions between devices break the protocol
+let GAME_VERSION = '15.8.4';      // handshake: mismatched versions between devices break the protocol
 let onlineRoomSize = 2;         // total seats including the host (2-4)
 let onlineCharacters = [];      // indexed by playerNumber: null | characterId
 let onlineReady = [];           // indexed by playerNumber
@@ -3538,6 +3562,10 @@ if (onlinePlayerNumber !== 0 && onlinePlayerNumber !== null && onlineState === '
           opponentReady: Boolean(onlineReady[onlinePlayerNumber === 0 ? 1 : 0]),
           epoch: onlineLobbyEpoch, matchId: onlineMatchId, pendingSkill: onlinePendingSkill,
           bounds: playArea(), interpolationDuration: remoteInterpolations[0] ? remoteInterpolations[0].interpDuration : 0,
+          teleport(i, x, y) { const p = players[i]; if (p && Number.isFinite(x) && Number.isFinite(y)) { p.x = x; p.y = y; p.vx = 0; p.vy = 0; p.stunned = 0; } },
+          captures: [...game.capture],
+          standoff: game.standoff,
+          seatInside: game.seats.map(seat => players.map((p, pi) => dist(p, seat) < CAPTURE_RADIUS * (seat.scale || 1) && p.stunned <= 0 ? pi : -1).filter(v => v >= 0)),
           seats: game.seats.map(seat => ({ x: seat.x, y: seat.y, capture: [...seat.capture], scale: seat.scale || 1 })),
           morphT: game.morphT || 0, morphPhase: game.morphPhase, rulePhase: game.rulePhase,
           musicActive: Boolean(game.music),
