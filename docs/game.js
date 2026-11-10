@@ -78,7 +78,21 @@
   let lastBumpAt = 0;  // throttle the body-squeeze thud
   let lastCaptureTickAt = 0;  // throttle the capture heartbeat
   function makePlayer(i) {
-    return { i, characterId: i ? 'guard' : 'dash', x: i ? 740 : 220, y: 360, vx: 0, vy: 0, facingX: i ? -1 : 1, facingY: 0, dashLeft: 0, dashHit: false, shieldLeft: 0, shieldHit: false, pulseLeft: 0, pullLeft: 0, warpLeft: 0, reboundLeft: 0, reboundX: 0, reboundY: 0, reboundPower: 0, trap: null, skillCooldown: 0, stunned: 0, blink: 0, walk: 0, aiDecision: 0, wantsSkill: false, anim: i * 1.7, emotion: 'neutral', emotionLeft: 0, castLeft: 0, castTotal: .4, impactLeft: 0, celebrateLeft: 0, vampireLeft: 0, knightLeft: 0, knightHit: false, knightRadius: 0, knightStun: 0, knightPower: 0, ninjaLeft: 0, ninjaClone: null, speedBoost: 0, mageProjectile: null };
+    return {
+      i, characterId: i ? 'guard' : 'dash', x: i ? 740 : 220, y: 360,
+      vx: 0, vy: 0, facingX: i ? -1 : 1, facingY: 0,
+      dashLeft: 0, dashHit: false, shieldLeft: 0, shieldHit: false,
+      pulseLeft: 0, pullLeft: 0, warpLeft: 0,
+      reboundLeft: 0, reboundX: 0, reboundY: 0, reboundPower: 0,
+      trap: null, skillCooldown: 0, stunned: 0, blink: 0, walk: 0,
+      aiDecision: 0, wantsSkill: false, anim: i * 1.7,
+      emotion: 'neutral', emotionLeft: 0, castLeft: 0, castTotal: .4,
+      impactLeft: 0, celebrateLeft: 0,
+      vampireLeft: 0, knightLeft: 0, knightHitCooldowns: [],
+      knightRadius: 0, knightStun: 0, knightPower: 0,
+      ninjaLeft: 0, ninjaClone: null, speedBoost: 0, boostFactor: 1,
+      mageProjectile: null
+    };
   }
   function nearestOpponent(p) {
     let best = null, bestDistance = Infinity;
@@ -302,7 +316,24 @@
     const spawnY = multi ? 470 : 355;
     for (let i = 0; i < count; i++) {
       const p = players[i];
-      Object.assign(p, { characterId: game.picks[i], x: spawn[i], y: spawnY, vx: 0, vy: 0, facingX: i < count / 2 ? 1 : -1, facingY: 0, dashLeft: 0, dashHit: false, shieldLeft: 0, shieldHit: false, pulseLeft: 0, pullLeft: 0, warpLeft: 0, reboundLeft: 0, reboundX: 0, reboundY: 0, reboundPower: 0, trap: null, skillCooldown: 0, stunned: 0, blink: 0, walk: 0, aiDecision: i ? .5 + Math.random() * .6 : 0, wantsSkill: false, anim: i * 1.7, emotion: 'neutral', emotionLeft: 0, castLeft: 0, castTotal: .4, impactLeft: 0, celebrateLeft: 0 });
+      Object.assign(p, {
+        characterId: game.picks[i], x: spawn[i], y: spawnY,
+        vx: 0, vy: 0, facingX: i < count / 2 ? 1 : -1, facingY: 0,
+        dashLeft: 0, dashHit: false, shieldLeft: 0, shieldHit: false,
+        pulseLeft: 0, pullLeft: 0, warpLeft: 0,
+        reboundLeft: 0, reboundX: 0, reboundY: 0, reboundPower: 0,
+        trap: null, skillCooldown: 0, stunned: 0, blink: 0, walk: 0,
+        aiDecision: i ? .5 + Math.random() * .6 : 0, wantsSkill: false,
+        aiDeceived: false, mashTimer: 0,
+        anim: i * 1.7, emotion: 'neutral', emotionLeft: 0,
+        castLeft: 0, castTotal: .4, impactLeft: 0, celebrateLeft: 0,
+        // Every transient skill must end at the round boundary. Otherwise a
+        // clone, sword or projectile can leak into the next round and hit early.
+        vampireLeft: 0, knightLeft: 0, knightHitCooldowns: [],
+        knightRadius: 0, knightStun: 0, knightPower: 0,
+        ninjaLeft: 0, ninjaClone: null, speedBoost: 0, boostFactor: 1,
+        mageProjectile: null
+      });
     }
   }
   function updateRuleHud() {
@@ -413,6 +444,9 @@
     game.playTipTime = game.round === 1 && game.mode !== 'demo' ? 4 : 0;
     $('play-tip').classList.toggle('show', game.playTipTime > 0);
     game.capture = Array(players.length).fill(0);
+    game.mashCounts = Array(players.length).fill(0);
+    game.morphT = 0;
+    game.morphPhase = -1;
     game.standoff = false;
     game.standoffTime = 0;
     game.standoffShown = false;
@@ -1023,14 +1057,16 @@ if (game.mode === 'online' && onlinePlayerNumber !== 0 && onlinePlayerNumber !==
       p.knightRadius = skill.radius;
       p.knightStun = skill.stun;
       p.knightPower = skill.power;
+      p.knightHitCooldowns = players.map(() => 0);
       burst(p.x, p.y, p.i, 14);
       tone(180, .15, 'square', .06, .8);
     },
     ninja(p, skill) {
-      // Ninja: shadow clone + speed boost
+      // Ninja: shadow clone + speed boost. speedBoost is seconds, not a multiplier.
       p.ninjaLeft = skill.duration;
       p.ninjaClone = { x: p.x, y: p.y, life: skill.duration };
-      p.speedBoost = skill.boost;
+      p.speedBoost = skill.duration;
+      p.boostFactor = skill.boost;
       burst(p.x, p.y, p.i, 18);
       burst(p.x + 20, p.y, p.i, 10);
       burst(p.x - 20, p.y, p.i, 10);
@@ -1045,8 +1081,7 @@ if (game.mode === 'online' && onlinePlayerNumber !== 0 && onlinePlayerNumber !==
         x: p.x, y: p.y,
         vx: (dx / distance) * 400,
         vy: (dy / distance) * 400,
-        life: 0.8,
-        radius: skill.radius,
+        life: skill.radius / 400,
         power: skill.power,
         stun: skill.stun
       };
@@ -1389,7 +1424,7 @@ if (game.mode === 'online' && onlinePlayerNumber !== 0 && onlinePlayerNumber !==
     return length > 1 ? { x: x / length, y: y / length } : { x, y };
   }
   function dist(a, b) { return Math.hypot(a.x - b.x, a.y - b.y); }
-  function updatePlayer(p, dt, move) {
+  function updatePlayer(p, dt, move, simulateCombat = true) {
     p.skillCooldown = Math.max(0, p.skillCooldown - dt);
     p.shieldLeft = Math.max(0, p.shieldLeft - dt);
     // Reset shield hit flag each frame so shield can block multiple attacks during its duration
@@ -1408,16 +1443,26 @@ if (game.mode === 'online' && onlinePlayerNumber !== 0 && onlinePlayerNumber !==
     if (p.vampireLeft > 0) p.vampireLeft = Math.max(0, p.vampireLeft - dt);
     if (p.knightLeft > 0) {
       p.knightLeft = Math.max(0, p.knightLeft - dt);
-      p.knightHitCooldown = Math.max(0, (p.knightHitCooldown || 0) - dt);
-      // Knight rotating sword: check collision with opponent (can hit multiple times)
-      for (const other of players) {
-        if (other === p) continue;
-        const distance = dist(p, other);
-        if (distance <= p.knightRadius && p.knightHitCooldown <= 0) {
-          p.knightHitCooldown = 0.3;
-          if (pushAway(p, other, p.knightPower || 380, p.knightStun || 0.6)) p.knightHitCooldown = 0.8;
+      if (!Array.isArray(p.knightHitCooldowns) || p.knightHitCooldowns.length !== players.length) {
+        p.knightHitCooldowns = players.map(() => 0);
+      }
+      for (let i = 0; i < p.knightHitCooldowns.length; i++) {
+        p.knightHitCooldowns[i] = Math.max(0, p.knightHitCooldowns[i] - dt);
+      }
+      // The online guest animates the sword but never resolves authoritative hits.
+      if (simulateCombat) {
+        for (const other of players) {
+          if (other === p) continue;
+          const distance = dist(p, other);
+          if (distance <= p.knightRadius && p.knightHitCooldowns[other.i] <= 0) {
+            const hit = pushAway(p, other, p.knightPower || 380, p.knightStun || 0.6);
+            // Cooldowns are per target, so swords on both sides can land together.
+            p.knightHitCooldowns[other.i] = hit ? 0.8 : 0.3;
+          }
         }
       }
+    }
+    if (p.ninjaLeft > 0) {
       p.ninjaLeft = Math.max(0, p.ninjaLeft - dt);
       if (p.ninjaClone) {
         p.ninjaClone.life -= dt;
@@ -1432,13 +1477,15 @@ if (game.mode === 'online' && onlinePlayerNumber !== 0 && onlinePlayerNumber !==
       proj.x += proj.vx * dt;
       proj.y += proj.vy * dt;
       proj.life -= dt;
-      for (const other of players) {
-        if (other === p) continue;
-        if (dist({ x: proj.x, y: proj.y }, other) <= 30) {
-          // Route through pushAway so shields can block the bolt like any other hit.
-          pushAway(p, other, proj.power, proj.stun);
-          p.mageProjectile = null;
-          break;
+      if (simulateCombat) {
+        for (const other of players) {
+          if (other === p) continue;
+          if (dist({ x: proj.x, y: proj.y }, other) <= 30) {
+            // Route through pushAway so shields can block the bolt like any other hit.
+            pushAway(p, other, proj.power, proj.stun);
+            p.mageProjectile = null;
+            break;
+          }
         }
       }
       if (p.mageProjectile && p.mageProjectile.life <= 0) {
@@ -1616,6 +1663,14 @@ if (game.mode === 'online' && onlinePlayerNumber !== 0 && onlinePlayerNumber !==
         game.elapsed = 0;
         game.ruleMove = null;
         game.ruleTarget = null;
+        game.morphT = 0;
+        game.morphPhase = -1;
+        game.mashCounts = Array(players.length).fill(0);
+        for (const p of players) p.mashTimer = 0;
+        // A rule mutation replaces the old mechanic instead of leaving its
+        // hitbox behind. In particular, morph scale must not survive as a
+        // hidden capture-radius modifier under the next rule.
+        if (newId !== 'morph') for (const seat of game.seats) seat.scale = 1;
         showBanner(`⚡ 机制突变：${RULES[newId].name}！`, 1.5);
         // Strong visual and audio feedback for chaos mutation
         game.shake = .25;
@@ -2518,7 +2573,7 @@ if (game.mode === 'online' && onlinePlayerNumber !== 0 && onlinePlayerNumber !==
   let onlineState = 'menu'; // menu | waiting | select | playing
   let onlineRoomCode = null;
   let onlinePlayerNumber = null; // 0 = host, 1 = guest
-let GAME_VERSION = '15.8.6';      // handshake: mismatched versions between devices break the protocol
+let GAME_VERSION = '15.8.7';      // handshake: mismatched versions between devices break the protocol
 let onlineRoomSize = 2;         // total seats including the host (2-4)
 let onlineCharacters = [];      // indexed by playerNumber: null | characterId
 let onlineReady = [];           // indexed by playerNumber
@@ -3012,7 +3067,7 @@ let remoteInterpolations = []; // guest side: one interpolation state per remote
       ruleTarget: game.ruleTarget,
       ruleHistory: game.ruleHistory.slice(-3),
       sofaCount: game.matchSofas,
-      seats: game.seats.map(seat => ({ x: seat.x, y: seat.y, capture: [...seat.capture] })),
+      seats: game.seats.map(seat => ({ x: seat.x, y: seat.y, capture: [...seat.capture], scale: seat.scale || 1 })),
       players: players.map(p => ({
         x: p.x, y: p.y, vx: p.vx, vy: p.vy,
         characterId: p.characterId,
@@ -3020,6 +3075,17 @@ let remoteInterpolations = []; // guest side: one interpolation state per remote
         stunned: p.stunned,
         shieldLeft: p.shieldLeft,
         dashLeft: p.dashLeft,
+        pulseLeft: p.pulseLeft,
+        pullLeft: p.pullLeft,
+        warpLeft: p.warpLeft,
+        vampireLeft: p.vampireLeft,
+        knightLeft: p.knightLeft,
+        knightRadius: p.knightRadius,
+        ninjaLeft: p.ninjaLeft,
+        ninjaClone: p.ninjaClone ? { ...p.ninjaClone } : null,
+        speedBoost: p.speedBoost,
+        boostFactor: p.boostFactor || 1,
+        mageProjectile: p.mageProjectile ? { ...p.mageProjectile } : null,
         castLeft: p.castLeft,
         castTotal: p.castTotal,
         facingX: p.facingX,
@@ -3035,6 +3101,21 @@ let remoteInterpolations = []; // guest side: one interpolation state per remote
       impacts: onlineImpactQueue.splice(0, onlineImpactQueue.length),
       result: game.phase === 'finished' ? { winner: game.scores.indexOf(Math.max(...game.scores)) } : null
     };
+  }
+  function applySnapshotSkillState(p, snap) {
+    // Visual state is host-owned too: guests must see the same aura, swords,
+    // clones and projectiles instead of only a moving character sprite.
+    p.pulseLeft = snap.pulseLeft || 0;
+    p.pullLeft = snap.pullLeft || 0;
+    p.warpLeft = snap.warpLeft || 0;
+    p.vampireLeft = snap.vampireLeft || 0;
+    p.knightLeft = snap.knightLeft || 0;
+    p.knightRadius = snap.knightRadius || 0;
+    p.ninjaLeft = snap.ninjaLeft || 0;
+    p.ninjaClone = snap.ninjaClone ? { ...snap.ninjaClone } : null;
+    p.speedBoost = snap.speedBoost || 0;
+    p.boostFactor = snap.boostFactor || 1;
+    p.mageProjectile = snap.mageProjectile ? { ...snap.mageProjectile } : null;
   }
   function applyOnlineSnapshot(state) {
     const rejectSnap = why => { if (window.__snapRejects) window.__snapRejects.push(why); };
@@ -3116,6 +3197,7 @@ let remoteInterpolations = []; // guest side: one interpolation state per remote
         p.facingY = remote.facingY;
         p.emotion = remote.emotion;
         p.trap = remote.trap ? { ...remote.trap } : null;
+        applySnapshotSkillState(p, remote);
         if (interp.lastUpdateTime === 0 || roundChanged) {
           interp.prevX = remote.x; interp.prevY = remote.y; interp.prevVX = remote.vx; interp.prevVY = remote.vy;
           p.x = remote.x; p.y = remote.y;
@@ -3151,6 +3233,7 @@ let remoteInterpolations = []; // guest side: one interpolation state per remote
     p.impactLeft = snap.impactLeft || 0;
     p.blink = snap.blink || 0;
     p.trap = snap.trap ? { ...snap.trap } : null;
+    applySnapshotSkillState(p, snap);
     p.vx = snap.vx;
     p.vy = snap.vy;
     const dx = snap.x - p.x, dy = snap.y - p.y;
@@ -3187,7 +3270,9 @@ let remoteInterpolations = []; // guest side: one interpolation state per remote
     for (const p of game.particles) { p.life -= dt; p.vy += 210 * dt; p.x += p.vx * dt; p.y += p.vy * dt; }
     if (game.phase === 'playing') game.time = Math.max(0, game.time - dt);
     updateRemoteInterpolation(dt);
-    if (game.phase === 'playing' && players[onlinePlayerNumber]) updatePlayer(players[onlinePlayerNumber], dt, localMoveVector());
+    if (game.phase === 'playing' && players[onlinePlayerNumber]) {
+      updatePlayer(players[onlinePlayerNumber], dt, localMoveVector(), false);
+    }
     if (game.phase === 'playing') {
       const lagEl = $('lag-indicator');
       if (lagEl) {
@@ -3660,6 +3745,37 @@ if (onlinePlayerNumber !== 0 && onlinePlayerNumber !== null && onlineState === '
           game.paused = false;
           resetPlayers();
         };
+        prepare('pulse', 'dash');
+        players[0].x = 400;
+        players[0].y = 300;
+        players[1].x = 450;
+        players[1].y = 300;
+        useSkill(players[0]);
+        results.pulse = { ok: players[1].stunned > 0 && players[1].vx > 0 };
+        prepare('dash', 'guard');
+        players[0].x = 400;
+        players[0].y = 300;
+        players[0].facingX = 1;
+        players[0].facingY = 0;
+        players[1].x = 440;
+        players[1].y = 300;
+        useSkill(players[1]);
+        useSkill(players[0]);
+        updatePlayer(players[0], .05, { x: 0, y: 0 });
+        collide();
+        results.dashShield = {
+          ok: players[1].stunned === 0 && players[1].shieldLeft < .85 && players[0].vx < 0,
+          shieldLeft: players[1].shieldLeft,
+          attackerVelocity: players[0].vx
+        };
+        prepare('blink', 'dash');
+        players[0].useAltSkill = true;
+        useSkill(players[0]);
+        results.blinkSpeed = {
+          ok: players[0].speedBoost === 2 && players[0].boostFactor === 1.8
+            && players[0].warpLeft === 0
+        };
+        players[0].useAltSkill = false;
         prepare('blink', 'guard');
         players[0].x = 200;
         players[0].y = 300;
@@ -3690,7 +3806,11 @@ if (onlinePlayerNumber !== 0 && onlinePlayerNumber !== null && onlineState === '
         const waitedForArm = players[1].stunned === 0 && Boolean(players[0].trap);
         updatePlayer(players[0], players[0].trap.arm + .01, { x: 0, y: 0 });
         updateTraps();
-        results.trap = { ok: waitedForArm && players[1].stunned > 0 && !players[0].trap, stun: players[1].stunned };
+        results.trap = {
+          ok: waitedForArm && players[1].stunned >= 1.49
+            && players[1].stunned > CHARACTERS.pulse.skill.stun && !players[0].trap,
+          stun: players[1].stunned
+        };
         prepare('trap', 'guard');
         useSkill(players[0]);
         useSkill(players[1]);
@@ -3714,6 +3834,18 @@ if (onlinePlayerNumber !== 0 && onlinePlayerNumber !== null && onlineState === '
         players[1].y = 300;
         useSkill(players[0]);
         results.vampireRange = { ok: players[1].stunned === 0 && players[0].vampireLeft > 0 };
+        prepare('vampire', 'guard');
+        players[0].x = 400;
+        players[0].y = 300;
+        players[1].x = 450;
+        players[1].y = 300;
+        game.seats = [{ x: 420, y: 300, capture: [0, 1], scale: 1 }];
+        useSkill(players[1]);
+        useSkill(players[0]);
+        results.vampireShield = {
+          ok: players[1].stunned === 0 && players[1].shieldLeft < .85
+            && game.seats[0].capture[1] === 1
+        };
         prepare('dash', 'guard');
         game.time = 4;
         const newTitles = Object.fromEntries(['vampire', 'knight', 'ninja', 'mage'].map(kind => {
@@ -3732,13 +3864,48 @@ if (onlinePlayerNumber !== 0 && onlinePlayerNumber !== null && onlineState === '
         useSkill(players[0]);
         updatePlayer(players[0], .05, { x: 0, y: 0 });
         results.knight = { ok: players[1].stunned > 0 && players[1].vx !== 0, stun: players[1].stunned };
+        game.picks = ['knight', 'dash', 'dash'];
+        players = Array.from({ length: 3 }, (_, i) => players[i] || makePlayer(i));
+        resetPlayers();
+        players[0].x = 400;
+        players[0].y = 300;
+        players[1].x = 350;
+        players[1].y = 300;
+        players[2].x = 450;
+        players[2].y = 300;
+        useSkill(players[0]);
+        updatePlayer(players[0], .05, { x: 0, y: 0 });
+        results.knightTwoSides = {
+          ok: players[1].stunned > 0 && players[2].stunned > 0
+            && players[1].vx < 0 && players[2].vx > 0,
+          leftVelocity: players[1].vx,
+          rightVelocity: players[2].vx
+        };
+        players = players.slice(0, 2);
         prepare('ninja', 'dash');
         players[0].x = 400;
         players[0].y = 300;
         useSkill(players[0]);
-        results.ninja = { ok: players[0].ninjaLeft > 0 && Boolean(players[0].ninjaClone) && players[0].speedBoost > 1, boost: players[0].speedBoost };
-        updatePlayer(players[0], .05, { x: 0, y: 0 });
-        results.ninjaTick = { ok: players[0].ninjaClone && players[0].ninjaClone.life < 2 && players[0].ninjaLeft < 2 };
+        results.ninja = {
+          ok: players[0].ninjaLeft === 2 && Boolean(players[0].ninjaClone)
+            && players[0].speedBoost === 2 && players[0].boostFactor === 1.7,
+          duration: players[0].speedBoost,
+          boost: players[0].boostFactor
+        };
+        const skillSnapshot = buildOnlineSnapshot().players[0];
+        const snapshotPlayer = makePlayer(1);
+        applySnapshotSkillState(snapshotPlayer, skillSnapshot);
+        results.onlineSkillState = {
+          ok: snapshotPlayer.speedBoost === 2 && snapshotPlayer.boostFactor === 1.7
+            && Boolean(snapshotPlayer.ninjaClone) && snapshotPlayer.ninjaLeft === 2
+        };
+        updatePlayer(players[0], .05, { x: 1, y: 0 });
+        results.ninjaTick = {
+          ok: players[0].ninjaClone && players[0].ninjaClone.life < 2
+            && players[0].ninjaLeft < 2 && Math.abs(players[0].vx - 230 * 1.7) < .01,
+          cloneLife: players[0].ninjaClone && players[0].ninjaClone.life,
+          vx: players[0].vx
+        };
         prepare('mage', 'dash');
         players[0].x = 300;
         players[0].y = 300;
@@ -3748,6 +3915,63 @@ if (onlinePlayerNumber !== 0 && onlinePlayerNumber !== null && onlineState === '
         const hadProjectile = Boolean(players[0].mageProjectile);
         for (let step = 0; step < 40 && players[0].mageProjectile; step++) updatePlayer(players[0], .016, { x: 0, y: 0 });
         results.mage = { ok: hadProjectile && players[1].stunned > 0 && !players[0].mageProjectile, stun: players[1].stunned };
+        prepare('mage', 'guard');
+        players[0].x = 300;
+        players[0].y = 300;
+        players[1].x = 460;
+        players[1].y = 300;
+        useSkill(players[1]);
+        useSkill(players[0]);
+        for (let step = 0; step < 40 && players[0].mageProjectile; step++) updatePlayer(players[0], .016, { x: 0, y: 0 });
+        results.mageShield = {
+          ok: players[1].stunned === 0 && players[1].shieldLeft < .85 && !players[0].mageProjectile
+        };
+        prepare('mage', 'dash');
+        players[0].x = 200;
+        players[0].y = 300;
+        players[1].x = 700;
+        players[1].y = 300;
+        useSkill(players[0]);
+        for (let step = 0; step < 40 && players[0].mageProjectile; step++) updatePlayer(players[0], .016, { x: 0, y: 0 });
+        results.mageRange = { ok: players[1].stunned === 0 && !players[0].mageProjectile };
+        prepare('ninja', 'mage');
+        Object.assign(players[0], {
+          vampireLeft: 1, knightLeft: 1, knightHitCooldowns: [.5],
+          knightRadius: 65, ninjaLeft: 1, ninjaClone: { x: 1, y: 2, life: 1 },
+          speedBoost: 1, boostFactor: 1.7, mageProjectile: { x: 1, y: 2, life: 1 }
+        });
+        resetPlayers();
+        results.roundReset = {
+          ok: players[0].vampireLeft === 0 && players[0].knightLeft === 0
+            && players[0].knightHitCooldowns.length === 0 && players[0].knightRadius === 0
+            && players[0].ninjaLeft === 0 && players[0].ninjaClone === null
+            && players[0].speedBoost === 0 && players[0].boostFactor === 1
+            && players[0].mageProjectile === null
+        };
+        game.mode = 'chaos';
+        game.phase = 'playing';
+        game.rule = RULES.morph;
+        game.rulePhase = 'active';
+        game.seats = [{ x: 480, y: 300, capture: [0, 0], scale: .62 }];
+        game.morphT = 4;
+        game.morphPhase = 1;
+        game.mashCounts = [2, 1];
+        game.chaosTimer = 1;
+        game.chaosNext = 1;
+        update(.016);
+        results.chaosRuleReset = {
+          ok: game.rule.id !== 'morph' && game.seats[0].scale === 1
+            && game.morphT === 0 && game.mashCounts.every(count => count === 0)
+        };
+        game.mashCounts = [2, 1];
+        game.morphT = 4;
+        game.morphPhase = 1;
+        newRound();
+        results.newRoundRuleReset = {
+          ok: game.mashCounts.every(count => count === 0)
+            && game.morphT === 0 && game.morphPhase === -1
+            && game.seats.every(seat => seat.scale === 1)
+        };
         return results;
       },
       checkSeats() {
