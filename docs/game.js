@@ -2243,7 +2243,18 @@ if (game.mode === 'online' && onlinePlayerNumber !== 0 && onlinePlayerNumber !==
       // The mode switch is an exit affordance: honor it even mid-match,
       // otherwise a live online game offers no way out on some layouts.
       const target = btn.dataset.mode;
-      (async () => { await leaveOnlineRoom('你已离开房间'); returnToMenu(target); })();
+      // 离开房间可能卡在 WebRTC close 上：给它 1.2 秒，超时也把界面切回来，
+      // 否则玩家会觉得"点了单人却没反应，只能再去点返回模式"。
+      (async () => {
+        try {
+          await Promise.race([
+            leaveOnlineRoom('你已离开房间'),
+            new Promise(resolve => setTimeout(resolve, 1200)),
+          ]);
+        } finally {
+          returnToMenu(target);
+        }
+      })();
       return;
     }
     if (game.phase !== 'menu' && game.phase !== 'finished') return;
@@ -3472,7 +3483,12 @@ if (onlinePlayerNumber !== 0 && onlinePlayerNumber !== null && onlineState === '
     syncMode();
     showOnlineScreen(typeof message === 'string' ? message : '');
     if (oldNetwork) {
-      try { await oldNetwork.leaveRoom(); } catch (_) {}
+      try {
+        await Promise.race([
+          oldNetwork.leaveRoom(),
+          new Promise(resolve => setTimeout(resolve, 900)),
+        ]);
+      } catch (_) { /* 关闭失败不影响界面状态 */ }
     }
   }
   // Difficulty and sofa-count selectors
