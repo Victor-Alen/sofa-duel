@@ -2596,7 +2596,7 @@ if (game.mode === 'online' && onlinePlayerNumber !== 0 && onlinePlayerNumber !==
   let onlineState = 'menu'; // menu | waiting | select | playing
   let onlineRoomCode = null;
   let onlinePlayerNumber = null; // 0 = host, 1 = guest
-let GAME_VERSION = '15.8.9';      // handshake: mismatched versions between devices break the protocol
+let GAME_VERSION = '15.10.0';      // handshake: mismatched versions between devices break the protocol
 let onlineRoomSize = 2;         // total seats including the host (2-4)
 let onlineCharacters = [];      // indexed by playerNumber: null | characterId
 let onlineReady = [];           // indexed by playerNumber
