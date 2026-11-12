@@ -2782,7 +2782,10 @@ let remoteInterpolations = []; // guest side: one interpolation state per remote
         if (!isCurrentOnlineOperation(operation, session)) return;
         if (onlineState !== 'waiting' && onlineState !== 'select') return;
         if (onlineReconnectTimer) { clearTimeout(onlineReconnectTimer); onlineReconnectTimer = null; }
-        enterOnlineSelect();
+        // Reset the lobby only on the waiting → select transition. Later joins
+        // must keep earlier picks: wiping on every join made 3-4p lobbies
+        // silently clear whoever selected before the last guest arrived.
+        if (onlineState === 'waiting') enterOnlineSelect();
         // Assign the seat, then publish the authoritative lobby to everyone.
         network.sendTo(seat, 'welcome', { playerNumber: seat, size: onlineRoomSize, epoch: onlineLobbyEpoch, v: GAME_VERSION });
         broadcastOnlineLobby();
