@@ -87,6 +87,26 @@ async function main() {
   console.log('host:', JSON.stringify({ state: hs.state, picks: hs.picks, players: (hs.players || []).length }));
   // drive the match
   await host.evaluate('window.__benchTimer = setInterval(() => window.SofaBench.step(.033), 33)');
+  // per-seat input routing: each guest holds a distinct direction; the host sim must move THAT guest's player
+  const inputTest = await host.evaluate('window.SofaBench.online().players.map(p => [Math.round(p.x), Math.round(p.y)]).join(";")');
+  console.error('INPUT before:', inputTest);
+  // guest1 holds D (right), guest2 holds W (up), guest3 holds S (down) via key events
+  const keySeq = [
+    { gi: 1, code: 'KeyD', key: 'd', kc: 68 },
+    { gi: 2, code: 'KeyW', key: 'w', kc: 87 },
+    { gi: 3, code: 'KeyS', key: 's', kc: 83 },
+  ];
+  for (const k of keySeq) {
+    await clients[k.gi].send('Page.bringToFront');
+    await sleep(150);
+    await clients[k.gi].send('Input.dispatchKeyEvent', { type: 'keyDown', code: k.code, key: k.key, windowsVirtualKeyCode: k.kc });
+    await sleep(1300);
+    await clients[k.gi].send('Input.dispatchKeyEvent', { type: 'keyUp', code: k.code, key: k.key, windowsVirtualKeyCode: k.kc });
+  }
+  await sleep(600);
+  const after = await host.evaluate('window.SofaBench.online().players.map(p => [Math.round(p.x), Math.round(p.y)]).join(";")');
+  console.error('INPUT after:', after);
+
   let finished = false;
   for (let k = 0; k < 4500; k++) {
     await host.evaluate('window.SofaBench.step(.033)');
