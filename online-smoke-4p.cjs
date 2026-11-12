@@ -99,6 +99,22 @@ async function main() {
     const s = await clients[i].evaluate('window.SofaBench.online()');
     console.log('seat' + i, JSON.stringify({ state: s.state, phase: s.phase, players: (s.players || []).length, scores: s.scores }));
   }
+  // drive the 4p match to completion and verify convergence on all seats
+  let conv = false;
+  for (let k = 0; k < 5000; k++) {
+    await host.evaluate('window.SofaBench.step(.033)');
+    if (k % 500 === 0) {
+      const ph = await host.evaluate('window.SofaBench.online().phase');
+      if (ph === 'finished') { conv = true; console.log('4p match finished at extra tick', k); break; }
+    }
+  }
+  if (conv) {
+    await sleep(2000);
+    for (let i = 0; i < 4; i++) {
+      const s = await clients[i].evaluate('window.SofaBench.online()');
+      console.log('final seat' + i, JSON.stringify({ state: s.state, phase: s.phase, scores: s.scores, players: (s.players || []).length }));
+    }
+  } else console.log('4p match did not finish within budget');
   console.log('ERRORS:', clients.map(c => c.errors.length ? c.label + ':' + c.errors[0] : null).filter(Boolean).join(' | ') || 'none');
   for (const c of clients) c.ws.close();
 }
