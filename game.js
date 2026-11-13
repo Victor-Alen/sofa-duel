@@ -1371,6 +1371,8 @@ if (game.mode === 'online' && onlinePlayerNumber !== 0 && onlinePlayerNumber !==
         } else if (skill.kind === 'pull') {
           useNow = enemyDistance < skill.radius && Math.random() < attemptChance;
         } else if (skill.kind === 'blink') {
+          // 闪闪 AI: switch to the speed form for distant sofas, blink form up close.
+          if (CHARACTERS[p.characterId].skillAlt) p.useAltSkill = seatDistance > 180;
           const shouldBlink = seatDistance > 150 || (enemyDistance < 170 && aggression > 0.4);
           useNow = shouldBlink && Math.random() < attemptChance;
         } else if (skill.kind === 'trap') {
@@ -2596,7 +2598,7 @@ if (game.mode === 'online' && onlinePlayerNumber !== 0 && onlinePlayerNumber !==
   let onlineState = 'menu'; // menu | waiting | select | playing
   let onlineRoomCode = null;
   let onlinePlayerNumber = null; // 0 = host, 1 = guest
-let GAME_VERSION = '15.10.0';      // handshake: mismatched versions between devices break the protocol
+let GAME_VERSION = '15.10.1';      // handshake: mismatched versions between devices break the protocol
 let onlineRoomSize = 2;         // total seats including the host (2-4)
 let onlineCharacters = [];      // indexed by playerNumber: null | characterId
 let onlineReady = [];           // indexed by playerNumber
