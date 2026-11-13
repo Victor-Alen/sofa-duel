@@ -90,7 +90,7 @@
       impactLeft: 0, celebrateLeft: 0,
       vampireLeft: 0, knightLeft: 0, knightHitCooldowns: [],
       knightRadius: 0, knightStun: 0, knightPower: 0,
-      ninjaLeft: 0, ninjaClone: null, speedBoost: 0, boostFactor: 1,
+      ninjaLeft: 0, ninjaClone: null, ninjaTrail: [], speedBoost: 0, boostFactor: 1,
       mageProjectile: null
     };
   }
@@ -331,7 +331,7 @@
         // clone, sword or projectile can leak into the next round and hit early.
         vampireLeft: 0, knightLeft: 0, knightHitCooldowns: [],
         knightRadius: 0, knightStun: 0, knightPower: 0,
-        ninjaLeft: 0, ninjaClone: null, speedBoost: 0, boostFactor: 1,
+        ninjaLeft: 0, ninjaClone: null, ninjaTrail: [], speedBoost: 0, boostFactor: 1,
         mageProjectile: null
       });
     }
@@ -1329,6 +1329,21 @@ if (game.mode === 'online' && onlinePlayerNumber !== 0 && onlinePlayerNumber !==
       }
       const length = Math.hypot(dx, dy);
       if (nearSeat && !nearOther && !contested) return { x: 0, y: 0 };
+      // Contested sofa: bump the nearest rival instead of standing idle —
+      // body pressure pushes them out of the capture circle over time.
+      if (nearSeat && contested) {
+        let rival = null, rivalDistance = Infinity;
+        for (const q of players) {
+          if (q === p || q.stunned > 0) continue;
+          const d2 = dist(q, targetSeat);
+          if (d2 < CAPTURE_RADIUS && d2 < rivalDistance) { rivalDistance = d2; rival = q; }
+        }
+        if (rival) {
+          const rdx = rival.x - p.x, rdy = rival.y - p.y;
+          const rLen = Math.hypot(rdx, rdy) || 1;
+          return { x: rdx / rLen, y: rdy / rLen };
+        }
+      }
       if (length > 1) { dx /= length; dy /= length; }
       // Easy difficulty: add slight movement noise
       if (difficulty === 'easy' && Math.random() < 0.1) {
@@ -1464,8 +1479,16 @@ if (game.mode === 'online' && onlinePlayerNumber !== 0 && onlinePlayerNumber !==
     }
     if (p.ninjaLeft > 0) {
       p.ninjaLeft = Math.max(0, p.ninjaLeft - dt);
+      // Delayed ghost: the clone mirrors where the ninja was ~0.5s ago,
+      // so opponents (bots and humans) must guess which shadow is real.
+      if (!Array.isArray(p.ninjaTrail)) p.ninjaTrail = [];
+      p.ninjaTrail.push({ x: p.x, y: p.y });
+      const trailDelay = 15; // ~0.5s at 30fps stepping
+      while (p.ninjaTrail.length > trailDelay) p.ninjaTrail.shift();
       if (p.ninjaClone) {
         p.ninjaClone.life -= dt;
+        const ghost = p.ninjaTrail[0] || { x: p.x, y: p.y };
+        p.ninjaClone.x = ghost.x; p.ninjaClone.y = ghost.y;
         if (p.ninjaClone.life <= 0) p.ninjaClone = null;
       }
     }
@@ -2298,7 +2321,18 @@ if (game.mode === 'online' && onlinePlayerNumber !== 0 && onlinePlayerNumber !==
       // The mode switch is an exit affordance: honor it even mid-match,
       // otherwise a live online game offers no way out on some layouts.
       const target = btn.dataset.mode;
-      (async () => { await leaveOnlineRoom('你已离开房间'); returnToMenu(target); })();
+      // 离开房间可能卡在 WebRTC close 上：给它 1.2 秒，超时也把界面切回来，
+      // 否则玩家会觉得"点了单人却没反应，只能再去点返回模式"。
+      (async () => {
+        try {
+          await Promise.race([
+            leaveOnlineRoom('你已离开房间'),
+            new Promise(resolve => setTimeout(resolve, 1200)),
+          ]);
+        } finally {
+          returnToMenu(target);
+        }
+      })();
       return;
     }
     if (game.phase !== 'menu' && game.phase !== 'finished') return;
@@ -2562,7 +2596,7 @@ if (game.mode === 'online' && onlinePlayerNumber !== 0 && onlinePlayerNumber !==
   let onlineState = 'menu'; // menu | waiting | select | playing
   let onlineRoomCode = null;
   let onlinePlayerNumber = null; // 0 = host, 1 = guest
-let GAME_VERSION = '15.8.6';      // handshake: mismatched versions between devices break the protocol
+let GAME_VERSION = '15.10.0';      // handshake: mismatched versions between devices break the protocol
 let onlineRoomSize = 2;         // total seats including the host (2-4)
 let onlineCharacters = [];      // indexed by playerNumber: null | characterId
 let onlineReady = [];           // indexed by playerNumber
@@ -2748,7 +2782,10 @@ let remoteInterpolations = []; // guest side: one interpolation state per remote
         if (!isCurrentOnlineOperation(operation, session)) return;
         if (onlineState !== 'waiting' && onlineState !== 'select') return;
         if (onlineReconnectTimer) { clearTimeout(onlineReconnectTimer); onlineReconnectTimer = null; }
-        enterOnlineSelect();
+        // Reset the lobby only on the waiting → select transition. Later joins
+        // must keep earlier picks: wiping on every join made 3-4p lobbies
+        // silently clear whoever selected before the last guest arrived.
+        if (onlineState === 'waiting') enterOnlineSelect();
         // Assign the seat, then publish the authoritative lobby to everyone.
         network.sendTo(seat, 'welcome', { playerNumber: seat, size: onlineRoomSize, epoch: onlineLobbyEpoch, v: GAME_VERSION });
         broadcastOnlineLobby();
@@ -3082,7 +3119,8 @@ let remoteInterpolations = []; // guest side: one interpolation state per remote
         emotion: p.emotion,
         impactLeft: p.impactLeft,
         blink: p.blink,
-        trap: p.trap ? { x: p.trap.x, y: p.trap.y, radius: p.trap.radius, left: p.trap.left, arm: p.trap.arm, stun: p.trap.stun } : null
+        trap: p.trap ? { x: p.trap.x, y: p.trap.y, radius: p.trap.radius, left: p.trap.left, arm: p.trap.arm, stun: p.trap.stun } : null,
+        ninjaClone: p.ninjaClone ? { x: p.ninjaClone.x, y: p.ninjaClone.y, life: p.ninjaClone.life } : null
       })),
       banner: { seq: game.bannerSeq, text: game.bannerText, time: game.bannerTime },
       echo: performance.now() - onlineEchoAt < 600 ? onlineEchoTimestamp : null,
@@ -3186,6 +3224,7 @@ let remoteInterpolations = []; // guest side: one interpolation state per remote
         p.facingY = remote.facingY;
         p.emotion = remote.emotion;
         p.trap = remote.trap ? { ...remote.trap } : null;
+        p.ninjaClone = remote.ninjaClone ? { ...remote.ninjaClone } : null;
         applySnapshotSkillState(p, remote);
         if (interp.lastUpdateTime === 0 || roundChanged) {
           interp.prevX = remote.x; interp.prevY = remote.y; interp.prevVX = remote.vx; interp.prevVY = remote.vy;
@@ -3557,7 +3596,12 @@ if (onlinePlayerNumber !== 0 && onlinePlayerNumber !== null && onlineState === '
     syncMode();
     showOnlineScreen(typeof message === 'string' ? message : '');
     if (oldNetwork) {
-      try { await oldNetwork.leaveRoom(); } catch (_) {}
+      try {
+        await Promise.race([
+          oldNetwork.leaveRoom(),
+          new Promise(resolve => setTimeout(resolve, 900)),
+        ]);
+      } catch (_) { /* 关闭失败不影响界面状态 */ }
     }
   }
   // Difficulty and sofa-count selectors

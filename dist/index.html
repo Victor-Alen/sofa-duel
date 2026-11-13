@@ -4,32 +4,34 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#faf3e9">
-  <title>沙发只能坐一个 | 六角色高光版</title>
-  <link rel="stylesheet" href="style.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🛋️</text></svg>">
+  <title>沙发只能坐一个 | 十角色多人混战版</title>
+  <link rel="stylesheet" href="style.css?v=15.10.0">
 </head>
 <body>
   <main class="shell">
     <header class="topbar">
       <div class="brand"><span class="brand-icon">✳</span><span>沙发只能坐一个<small>SOFA SHOWDOWN · SHOWTIME</small></span></div>
-      <div class="top-right"><span class="pill">角色有情绪 · 回合有高光 · 一个沙发</span><button id="fullscreen-btn" class="top-action">⛶ 大屏</button><button id="demo-btn" class="top-action demo-action">▶ 自动演示</button><button id="pause-btn" class="icon-btn" aria-label="暂停游戏" title="暂停游戏">⏸</button><button id="sound-btn" class="icon-btn" aria-label="切换声音" title="切换声音">♪</button></div>
+      <div class="top-right"><span class="pill">角色有情绪 · 高光回放 · 5 种房间规则 · 联机对战</span><button id="fullscreen-btn" class="top-action">⛶ 大屏</button><button id="demo-btn" class="top-action demo-action">▶ 自动演示</button><button id="help-btn" class="icon-btn help-btn" aria-label="游戏帮助" title="游戏帮助">?</button><button id="pause-btn" class="icon-btn" aria-label="暂停游戏" title="暂停游戏">⏸</button><button id="sound-btn" class="icon-btn" aria-label="切换声音" title="切换声音">♪</button></div>
     </header>
 
     <section class="intro">
-      <div><span class="eyebrow">谁才是这个家的主人？</span><h1>抢到沙发，<em>坐到最后。</em></h1><p>六名角色自由选，用专属技能逼开对手。独占 1.6 秒得分，先拿 3 分获胜。</p></div>
-      <div class="mode-switch" role="group" aria-label="游戏模式"><button class="mode active" data-mode="cpu">单人挑战</button><button class="mode" data-mode="duo">本地双人</button><button class="mode" data-mode="demo">自动演示</button></div>
+      <div><span class="eyebrow">谁才是这个家的主人？</span><h1>抢到沙发，<em>坐到最后。</em></h1><p>十名角色自由选，用专属技能逼开对手。独占 1.6 秒得分，先拿 3 分获胜。</p></div>
+      <div class="mode-switch" role="group" aria-label="游戏模式"><button class="mode active" data-mode="cpu">人机对战</button><button class="mode" data-mode="chaos">混沌模式</button><button class="mode" data-mode="duo">本地双人</button><button class="mode" data-mode="online">联网对战</button><button class="mode" data-mode="demo">自动演示</button></div>
     </section>
 
     <section class="game-wrap" aria-label="沙发对决游戏">
       <div id="record-hook" class="record-hook"></div>
       <div class="showcase-actions"><button id="stop-demo-btn" class="showcase-button">停止演示</button><button id="exit-fullscreen-btn" class="showcase-button">退出大屏</button></div>
       <div class="scoreboard">
-        <div class="team team-a"><span class="avatar coral">●</span><div><small id="player-a-label">玩家一</small><strong id="score-a">0</strong></div><div class="capture-track"><span id="cap-a"></span></div></div>
+        <div class="team team-a"><span class="avatar coral">●</span><div><small id="player-a-label">你</small><strong id="score-a">0</strong></div><div class="capture-track"><span id="cap-a"></span></div></div>
         <div class="center-hud"><span id="status-label">准备开战</span><strong id="timer">18</strong><span class="sec">秒</span></div>
-        <div class="team team-b"><div class="capture-track"><span id="cap-b"></span></div><div><small id="player-b-label">沙发守卫</small><strong id="score-b">0</strong></div><span class="avatar blue">●</span></div>
+        <div class="team team-b"><div class="capture-track"><span id="cap-b"></span></div><div><small id="player-b-label">对手</small><strong id="score-b">0</strong></div><div id="score-extra" class="score-extra" hidden></div><span class="avatar blue">●</span></div>
       </div>
       <div class="canvas-frame">
         <canvas id="game" width="960" height="540" aria-label="游戏画面：两个人争夺房间中央的沙发"></canvas>
         <div id="rule-hud" class="rule-hud" aria-live="polite"></div>
+        <div id="mash-bar" class="mash-bar" hidden><div class="mash-you"><span id="mash-bar-you"></span></div><div class="mash-foe"><span id="mash-bar-foe"></span></div></div>
         <div id="replay-ui" class="replay-ui" hidden>
           <div><small>本回合高光</small><strong id="replay-title">这一撞值回票价！</strong></div>
           <button id="skip-replay" type="button">跳过回放</button>
@@ -42,19 +44,104 @@
         </div>
         <div id="start-screen" class="screen visible">
           <div class="screen-card">
+            <div class="mode-switch start-mode-switch" role="group" aria-label="桌面游戏模式"><button class="mode active" data-mode="cpu">人机对战</button><button class="mode" data-mode="chaos">混沌模式</button><button class="mode" data-mode="duo">本地双人</button><button class="mode" data-mode="online">联网对战</button><button class="mode" data-mode="demo">自动演示</button></div>
             <span class="card-icon">🛋️</span>
             <p class="card-kicker">SOFA SHOWDOWN</p>
             <h2>今晚沙发归谁？</h2>
-            <p>一个房间，一张沙发。<br>每回合随机房间规则，抢满 1.6 秒得分。</p>
             <div class="pickers">
               <div class="picker-row"><span>玩家一</span><div id="picker-a" class="character-options"></div></div>
               <div id="picker-b-row" class="picker-row" hidden><span>玩家二</span><div id="picker-b" class="character-options"></div></div>
               <div class="skill-notes"><small id="skill-note" class="skill-note">珊珊 · 冲撞：向前冲刺，撞飞对手</small><small id="skill-note-b" class="skill-note" hidden></small></div>
             </div>
-            <p id="control-tip" class="control-tip">WASD 移动 · 空格放技能</p>
+            <div id="sofa-selector" class="difficulty-selector">
+              <span class="difficulty-label">沙发数量</span>
+              <div class="difficulty-options">
+                <button class="difficulty-btn sofa-btn active" data-sofas="1">1 张</button>
+                <button class="difficulty-btn sofa-btn" data-sofas="3">3 张</button>
+              </div><div id="count-selector" class="difficulty-selector"><span class="difficulty-label">游玩人数</span><div class="difficulty-options"><button class="difficulty-btn count-btn active" data-count="2">2 人</button><button class="difficulty-btn count-btn" data-count="3">3 人</button><button class="difficulty-btn count-btn" data-count="4">4 人</button></div></div>
+            </div>
+            <div id="difficulty-selector" class="difficulty-selector">
+              <span class="difficulty-label">AI 难度</span>
+              <div class="difficulty-options">
+                <button class="difficulty-btn" data-difficulty="easy">简单</button>
+                <button class="difficulty-btn active" data-difficulty="normal">普通</button>
+                <button class="difficulty-btn" data-difficulty="hard">困难</button>
+              </div>
+            </div>
+            <div id="stats-strip" class="stats-strip" hidden></div>
+            <div id="howto" class="howto" hidden>
+              <h3>第一次玩？三步上手</h3>
+              <p>🕹️ 电脑 WASD 移动 / 手机摇杆</p>
+              <p>🛋️ 站上沙发不被赶走，占满 1.6 秒得 1 分</p>
+              <p>💥 技能键把对手撞飞，先到 3 分获胜</p>
+              <button id="howto-ok-btn" class="primary-btn">知道了，开始！ <span>→</span></button>
+            </div>
             <button id="start-btn" class="primary-btn">开始抢沙发 <span>→</span></button>
-            <small>随机房间规则 · 每局 18 秒 · 三分获胜</small>
+            <button id="audio-settings-btn" class="audio-settings-btn" title="声音设置">⚙️ 声音设置</button>
+            <dialog id="audio-dialog">
+              <h3>声音设置</h3>
+              <button id="toggle-music-btn" class="primary-btn audio-toggle">背景音乐：开</button>
+              <div class="music-style-selector">
+                <label>音乐风格：</label>
+                <div class="music-style-options">
+                  <button class="music-style-btn active" data-style="cheerful">🎵 轻快</button>
+                  <button class="music-style-btn" data-style="energetic">🔥 激情</button>
+                  <button class="music-style-btn" data-style="relaxed">🌙 舒缓</button>
+                </div>
+              </div>
+              <button id="toggle-sfx-btn" class="primary-btn audio-toggle">碰撞音效：开</button>
+              <button id="audio-close-btn" class="ghost-btn">完成</button>
+            </dialog>
           </div>
+        </div>
+        <div id="online-screen" class="screen" aria-live="polite">
+          <div class="screen-card online-card" role="dialog" aria-modal="true" aria-labelledby="online-title">
+            <span class="card-icon">🌐</span>
+            <p class="card-kicker">ONLINE MODE</p>
+            <h2 id="online-title" tabindex="-1">联网对战</h2>
+            <div id="online-menu" class="online-menu">
+              <div id="online-size-selector" class="difficulty-selector"><span class="difficulty-label">房间人数</span><div class="difficulty-options"><button class="difficulty-btn size-btn active" data-size="2">2 人</button><button class="difficulty-btn size-btn" data-size="3">3 人</button><button class="difficulty-btn size-btn" data-size="4">4 人</button></div></div><button id="create-room-btn" class="primary-btn">创建房间 <span>+</span></button>
+              <div class="online-divider"><span>或</span></div>
+              <div class="join-room-form">
+                <input type="text" id="room-code-input" placeholder="输入 6 位房间号" maxlength="6" autocomplete="off" autocapitalize="characters" spellcheck="false">
+                <button id="join-room-btn" class="secondary-btn">加入房间 <span>→</span></button>
+              </div>
+              <p id="online-error" class="online-error" role="alert"></p>
+            </div>
+            <div id="online-waiting" class="online-waiting" hidden>
+              <div class="room-code-display">
+                <small>房间号</small>
+                <strong id="room-code">------</strong>
+                <button id="copy-code-btn" class="icon-btn" title="复制房间号">📋</button>
+              </div>
+              <p class="waiting-text">等待对手加入...</p>
+              <div class="waiting-players">
+                <div class="waiting-player ready"><span>●</span><small>玩家一 (你)</small></div>
+                <div class="waiting-player" id="waiting-player-2"><span>○</span><small>等待中...</small></div>
+              </div>
+              <button id="cancel-waiting-btn" class="secondary-btn">取消</button>
+            </div>
+            <div id="online-character-select" class="online-character-select" hidden>
+              <p class="select-hint">请先选择角色，再点击“准备好”</p>
+              <div id="online-picker" class="character-options" aria-label="选择你的角色"></div>
+              <div class="online-status" id="online-lobby-players"></div>
+              </div>
+              <button id="online-ready-btn" class="primary-btn online-ready-btn" type="button" disabled>准备好 <span>✓</span></button>
+            </div>
+            <button id="back-to-menu-btn" class="secondary-btn" hidden>离开房间</button>
+          </div>
+        </div>
+        <div id="online-game-hud" class="online-game-hud" hidden>
+          <div class="online-player-info">
+            <span class="player-indicator" id="online-you-indicator">你</span>
+            <span class="opponent-name" id="online-opponent-name">对手</span>
+          </div>
+          <div class="connection-status" id="connection-status">
+            <span class="status-dot"></span>
+            <small>连接中</small>
+            <span class="lag-indicator" id="lag-indicator" hidden>0ms</span>
+          </div>
+          <button id="online-leave-btn" class="online-leave-btn" type="button">退出房间</button>
         </div>
         <div id="result-screen" class="screen" aria-live="polite">
           <div class="screen-card result-card">
@@ -63,6 +150,7 @@
             <h2 id="result-title">玩家一赢了！</h2>
             <p id="result-subtitle">沙发的新主人诞生了。</p>
             <p id="result-rule" class="result-rule"></p>
+            <p id="match-stats" class="match-stats"></p>
             <button id="again-btn" class="primary-btn">再来一局 <span>↗</span></button>
             <div class="result-actions"><button id="change-btn" class="secondary-btn">换角色</button><button id="poster-btn" class="secondary-btn">生成战绩海报</button></div>
           </div>
@@ -71,21 +159,25 @@
         <div id="round-banner" class="round-banner" aria-live="polite"></div>
         <div id="play-tip" class="play-tip">靠近沙发，独占 1.6 秒得分</div>
       </div>
-      <p class="fullscreen-hint">P 暂停 · Esc 退出大屏 · 双人键位见游戏首页</p>
+      <p class="fullscreen-hint">P 暂停 · Esc 退出大屏</p>
       <div class="mobile-controls" aria-label="触屏控制">
         <div id="joystick" class="joystick"><span id="joystick-knob"></span></div>
         <button id="dash-touch" class="dash-touch">冲撞<small>↗</small></button>
+        <button id="skill-toggle" class="skill-toggle" hidden>切换<small>⇄</small></button>
       </div>
       <div class="record-cta">你选谁来抢？</div>
     </section>
-
-    <section class="below">
-      <div class="instruction"><span class="instruction-icon">↕</span><div><strong>移动</strong><span>玩家一：W A S D <i>·</i> 玩家二：方向键</span></div></div>
-      <div class="instruction"><span class="instruction-icon">✦</span><div><strong>技能</strong><span>玩家一：空格 <i>·</i> 玩家二：回车</span></div></div>
-      <div class="instruction tip"><span class="instruction-icon">!</span><div><strong>小秘诀</strong><span>两人同时靠近沙发时无法占领，先用技能逼开对手。P 暂停。</span></div></div>
-    </section>
-    <footer>六角色同屏对决 · 手机可单人挑战 · 无需联网</footer>
   </main>
+  <dialog id="help-dialog" class="help-dialog" aria-label="游戏帮助">
+    <div class="help-card">
+      <div class="help-head">
+        <span class="help-mark">?</span>
+        <div><p class="card-kicker">HOW TO PLAY</p><h2>怎么抢沙发</h2></div>
+        <button id="help-close" class="help-close" type="button" aria-label="关闭帮助">×</button>
+      </div>
+      <div id="help-body" class="help-body"></div>
+    </div>
+  </dialog>
   <dialog id="poster-dialog" class="poster-dialog" aria-label="战绩海报">
     <button id="poster-close" class="poster-close" aria-label="关闭海报">×</button>
     <img id="poster-image" alt="本局战绩海报">
@@ -94,8 +186,9 @@
     <button id="poster-save" class="primary-btn" type="button" hidden>保存到相册</button>
     <p id="poster-status" role="status"></p>
   </dialog>
-  <script src="characters.js"></script>
-  <script src="rules.js"></script>
-  <script src="game.js"></script>
+  <script src="characters.js?v=15.10.0"></script>
+  <script src="rules.js?v=15.10.0"></script>
+  <script src="network.js?v=15.10.0"></script>
+  <script src="game.js?v=15.10.0"></script>
 </body>
 </html>

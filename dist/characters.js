@@ -10,7 +10,7 @@
     guard: {
       id: 'guard', name: '蓝蓝', color: '#76b5eb', dark: '#428bc8', light: '#b1d5ee',
       speed: 205, ears: 'round', pitch: 520, wave: 'sine', personality: '笑眯眯，但绝不让座',
-      skill: { kind: 'shield', name: '护盾', description: '挡住冲撞、震波或弹簧', cooldown: 2.45, duration: 1, counterPower: 650 }
+      skill: { kind: 'shield', name: '护盾', description: '挡住冲撞、震波或弹簧', cooldown: 3.0, duration: 0.85, counterPower: 450 }
     },
     pulse: {
       id: 'pulse', name: '团团', color: '#83c996', dark: '#4f9b70', light: '#b7e3bf',
@@ -36,17 +36,17 @@
     vampire: {
       id: 'vampire', name: '德德', color: '#8b45a6', dark: '#5e2d73', light: '#b87fc9',
       speed: 215, ears: 'pointed', pitch: 380, wave: 'sawtooth', personality: '优雅地吸取对手活力',
-      skill: { kind: 'vampire', name: '吸血蝙蝠', description: '化身蝙蝠吸血回复，并短暂隐身', cooldown: 3.5, duration: 1.2, heal: 0.3, stun: 0.4 }
+      skill: { kind: 'vampire', name: '吸血蝙蝠', description: '化身蝙蝠吸血，咬中吸取对手的占领进度', cooldown: 3.5, duration: 1.2, stun: 0.4, counterPower: 450 }
     },
     knight: {
       id: 'knight', name: '剑剑', color: '#c0c0c0', dark: '#808080', light: '#e8e8e8',
       speed: 185, ears: 'helmet', pitch: 220, wave: 'square', personality: '旋转宝剑，所向披靡',
-      skill: { kind: 'knight', name: '剑刃旋风', description: '旋转宝剑，碰到对手使其眩晕', cooldown: 2.8, duration: 1.5, radius: 65, stun: 0.6, power: 380 }
+      skill: { kind: 'knight', name: '剑刃旋风', description: '旋转宝剑，碰到对手使其眩晕', cooldown: 2.8, duration: 1.5, radius: 65, stun: 0.45, power: 380 }
     },
     ninja: {
       id: 'ninja', name: '影影', color: '#2d2d2d', dark: '#1a1a1a', light: '#4a4a4a',
       speed: 230, ears: 'mask', pitch: 720, wave: 'sine', personality: '神出鬼没，分身扰敌',
-      skill: { kind: 'ninja', name: '影分身', description: '留下分身迷惑对手，真身加速', cooldown: 3.0, duration: 2.0, boost: 1.5 }
+      skill: { kind: 'ninja', name: '影分身', description: '留下分身迷惑对手，真身加速', cooldown: 3.0, duration: 2.0, boost: 1.7 }
     },
     mage: {
       id: 'mage', name: '法法', color: '#4169e1', dark: '#2a4494', light: '#6b8de3',
